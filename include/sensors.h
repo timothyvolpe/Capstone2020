@@ -1,5 +1,7 @@
+#pragma once
+
 /**
-* @file vehicle.h
+* @file sensors.h
 * @brief Contains code for managing all the vehicle sensors.
 *
 * @authors Timothy Volpe
@@ -11,6 +13,9 @@
 #define ULTRASONIC_SENSOR_COUNT 4
 
 class CUltrasonicSensor;
+class CLIDARSensor;
+class CInertialMotionSensors;
+class CGlobalPositioning;
 
 /**
 * @brief Class for managing all vehicle sensors.
@@ -23,7 +28,10 @@ class CUltrasonicSensor;
 class CSensorManager
 {
 private:
-	CUltrasonicSensor *m_pUltrasonicsSensors[ULTRASONIC_SENSOR_COUNT];
+	CUltrasonicSensor* m_pUltrasonicSensors[ULTRASONIC_SENSOR_COUNT];
+	CLIDARSensor* m_pLIDARSensor;
+	CInertialMotionSensors* m_pInertialMotionSensors;
+	CGlobalPositioning* m_pGPS;
 public:
 	/** Default constructor. */
 	CSensorManager();
@@ -32,11 +40,11 @@ public:
 
 	/**
 	* @brief Initialize all the sensors but dont start acquisition.
-	* @detail This will begin commmunication with all the sensors and set their default configs,
+	* @details This will begin commmunication with all the sensors and set their default configs,
 	*	however it will not begin acquiring.
-	* @returns Returns true if able to communicate with all sensors and set their configs.
+	* @returns Returns #ERR_OK, or an appropriate error code if a failure occured.
 	*/
-	bool initSensors();
+	int initSensors();
 
 	/**
 	* @brief This class tells all sensors to begin acquiring data.

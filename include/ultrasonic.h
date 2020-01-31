@@ -1,3 +1,5 @@
+#pragma once
+
 /**
 * @file ultrasonic.h
 * @brief Ultrasonic sensor management for underwater obstacle avoidance.

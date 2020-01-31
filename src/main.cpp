@@ -7,11 +7,20 @@
 * @date 1/29/2020
 */
 
+// Notes
+
+// Main thread handles message loop
+// Child thread for console input
+
 #include <iostream>
 #include "vehicle.h"
+#include "def.h"
 
+/** @brief Program entry point. */
 int main( int argc, char *argv[] )
 {
+	int errCode;
+
 	std::cout << "  +========================================================================+\n";
 	std::cout << "  == Welcome to the ENEL Green Power Canal Vehicle Controller Application ==\n";
 	std::cout << "  +========================================================================+\n";
@@ -32,11 +41,27 @@ int main( int argc, char *argv[] )
 
 	// !! Do this first !!
 	std::cout << "Initializing vehicle...\n";
-	if( !CVehicle::instance().initialize() ) {
+	errCode = CVehicle::instance().initialize();
+	if( errCode != ERR_OK ) {
 		std::cout << "Vehicle initialization: FAILED\n";
-		return -1;
+		std::cout << "ERROR: " << GetErrorString( errCode ) << "\n";
+		return errCode;
 	}
 	std::cout << "Vehicle initialization: SUCCESS\n";
 
 	// Vehicle class should now be safe for use
+
+	std::cout << "\n";
+
+	// Start program loop
+	std::cout << "Entering program loop...\n";
+	errCode = CVehicle::instance().start();
+	if( errCode != ERR_OK ) {
+		std::cout << "ERROR: " << GetErrorString( errCode ) << "\n";
+		return errCode;
+	}
+
+	std::cout << "\n";
+
+	return ERR_OK;
 }
