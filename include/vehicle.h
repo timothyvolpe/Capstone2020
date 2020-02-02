@@ -1,6 +1,7 @@
 #pragma once
 #include <mutex>
 #include <queue>
+#include "terminal.h"
 
 /**
 * @file vehicle.h
@@ -11,10 +12,14 @@
 * @date 1/29/2020
 */
 
-class CTerminal;
 class CSensorManager;
 
 struct message_t;
+
+/** use to reference the main vehicle class */
+#define LocalVehicle() CVehicle::instance()
+/** used to reference the terminal */
+#define Terminal() CVehicle::instance().getTerminal()
 
 /**
 * @brief Main vehicle class singleton.
@@ -38,6 +43,9 @@ private:
 
 	std::mutex m_msgLoopMutex;
 	std::queue<std::unique_ptr<message_t>> m_messageQueue;
+
+	/** Parse a terminal command input from the user. */
+	void parseCommandMessage( std::unique_ptr<message_t> pCommandMsg );
 public:
 	/**
 	* @brief Returns instance of vehicle singleton.
@@ -84,9 +92,13 @@ public:
 	*	There is no guarantee for when the message will be executed, as it will be added to the end of the queue. 
 	*	Messages marked as important will be guaranteed to be executed. Mesages with a timeout will be deleted after
 	*	the timeout has expired, and messages that are not marked as important are not guaranteed to be executed.
-	* @warning pMsg will be copied, therefore the argument data will not be owned by the CVehicle class. It must be 
-	*	deleted by the calling method.
-	* @param[in]	pMsg	The message data to be posted. This will be copied into the message queue.
+	* @param[in]	pMsg	A unique pointer to the message data. The vehicle object will take ownership of this data.
 	*/
-	void postMessage( message_t &pMsg );
+	void postMessage( std::unique_ptr<message_t> pMsg );
+
+	/**
+	* @brief Returns the terminal class object.
+	* @returns Pointer to terminal class object.
+	*/
+	CTerminal* getTerminal();
 };

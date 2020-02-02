@@ -1,4 +1,6 @@
 #include <chrono>
+#include <iostream>
+#include <string>
 #include "def.h"
 #include "vehicle.h"
 #include "terminal.h"
@@ -13,18 +15,35 @@ CTerminal::~CTerminal() {
 
 int CTerminal::init()
 {
-	// Create the user input thread
+	// Create and start user input thread
+	m_threadRunning = true;
 	m_inputThread = std::thread( &CTerminal::inputThreadMain, this );
 
-	terminal_msg_t testMsg( MSGID_QUIT, true, 0 );
-	testMsg.commandName = "test";
-
-	CVehicle::instance().postMessage( testMsg );
-
 	return ERR_OK;
+}
+void CTerminal::shutdown()
+{
+	m_threadRunning = false;
+	// Because we can't interrupt cin
+	this->print( "\nPressing enter to exit...\n" );
+	m_inputThread.join();
 }
 
 void CTerminal::inputThreadMain()
 {
 	//std::cin
+	while( m_threadRunning )
+	{
+		std::string userInput;
+
+		// Need platform-specific fix to prevent interleaving characters
+		std::getline( std::cin, userInput );
+		if( !userInput.empty() )
+		{
+			// Send a message
+			terminal_msg_t termMsg( MSGID_TERMINAL_MSG, true, 0 );
+			termMsg.command = userInput;
+			LocalVehicle().postMessage( std::make_unique<terminal_msg_t>( termMsg ) );
+		}
+	}
 }

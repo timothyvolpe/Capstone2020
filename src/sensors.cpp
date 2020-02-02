@@ -1,4 +1,5 @@
 #include <iostream>
+#include "vehicle.h"
 #include "sensors.h"
 #include "ultrasonic.h"
 #include "lidar.h"
@@ -38,24 +39,24 @@ CSensorManager::~CSensorManager()
 int CSensorManager::initSensors()
 {
 	// Initialize ultrasonic sensors
-	std::cout << "    Initializing ultrasonic sensors...\n";
+	Terminal()->print( "    Initializing ultrasonic sensors...\n" );
 	for( unsigned int i = 0; i < ULTRASONIC_SENSOR_COUNT; i++ ) {
-		std::cout << "    - Ultrasonic sensor " << i+1 << "... ";
+		Terminal()->print( "    - Ultrasonic sensor %d...", i+1 );
 		m_pUltrasonicSensors[i] = new CUltrasonicSensor();
-		std::cout << "SUCCESS\n";
+		Terminal()->print( "SUCCESS\n" );
 	}
 	// Initialize RPLIDAR
-	std::cout << "    Initializing LIDAR sensor... ";
+	Terminal()->print( "    Initializing LIDAR sensor... " );
 	m_pLIDARSensor = new CLIDARSensor();
-	std::cout << "SUCCESS\n";
+	Terminal()->print( "SUCCESS\n" );
 	// Initialize IMU
-	std::cout << "    Initializing inertial motion sensors... ";
+	Terminal()->print( "    Initializing inertial motion sensors... " );
 	m_pInertialMotionSensors = new CInertialMotionSensors();
-	std::cout << "SUCCESS\n";
+	Terminal()->print( "SUCCESS\n" );
 	// Initialize GPS
-	std::cout << "    Initializing GPS unit... ";
+	Terminal()->print( "    Initializing GPS unit... " );
 	m_pGPS = new CGlobalPositioning();
-	std::cout << "SUCCESS\n";
+	Terminal()->print( "SUCCESS\n" );
 
 	return ERR_OK;
 }

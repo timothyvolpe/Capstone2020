@@ -41,27 +41,29 @@ int main( int argc, char *argv[] )
 
 	// !! Do this first !!
 	std::cout << "Initializing vehicle...\n";
-	errCode = CVehicle::instance().initialize();
+	// We can use Terminal().print(...) AFTER this point
+	errCode = LocalVehicle().initialize();
+	// We can now use Terminal().print(...)
 	if( errCode != ERR_OK ) {
-		std::cout << "Vehicle initialization: FAILED\n";
-		std::cout << "ERROR: " << GetErrorString( errCode ) << "\n";
+		Terminal()->print( "Vehicle initialization: FAILED\n" );
+		Terminal()->print( "ERROR: %s\n", GetErrorString( errCode ) );
 		return errCode;
 	}
-	std::cout << "Vehicle initialization: SUCCESS\n";
+	Terminal()->print( "Vehicle initialization: SUCCESS\n" );
 
 	// Vehicle class should now be safe for use
 
-	std::cout << "\n";
+	Terminal()->print( "\n" );
 
 	// Start program loop
-	std::cout << "Entering program loop...\n";
-	errCode = CVehicle::instance().start();
+	Terminal()->print( "Entering program loop...\n" );
+	errCode = LocalVehicle().start();
 	if( errCode != ERR_OK ) {
-		std::cout << "ERROR: " << GetErrorString( errCode ) << "\n";
+		Terminal()->print( "ERROR: %s\n", GetErrorString( errCode ) );
 		return errCode;
 	}
 
-	std::cout << "\n";
+	Terminal()->print( "\n" );
 
 	return ERR_OK;
 }

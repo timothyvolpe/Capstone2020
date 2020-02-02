@@ -12,6 +12,7 @@
 
 #define MSGID_UNKNOWN		0
 #define MSGID_QUIT			1
+#define MSGID_TERMINAL_MSG	2
 
 /**
 * @brief The base message struct class
@@ -41,8 +42,8 @@ struct terminal_msg_t : public message_t
 	terminal_msg_t() {}
 	terminal_msg_t( unsigned int id, bool imprtnt, unsigned int timeoutInMS ) : message_t( id, imprtnt, timeoutInMS ) {}
 	terminal_msg_t( const terminal_msg_t& cpy ) : message_t(cpy) {
-		commandName = cpy.commandName;
+		command = cpy.command;
 	}
 
-	std::string		commandName;
+	std::string		command;
 };

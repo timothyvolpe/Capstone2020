@@ -1,6 +1,10 @@
 #include <iostream>
 #include <assert.h>
 #include <memory>
+#include <thread>
+#include <algorithm>
+#include <iterator>
+#include <cctype>
 #include "vehicle.h"
 #include "sensors.h"
 #include "def.h"
@@ -14,13 +18,14 @@ CVehicle::CVehicle() {
 }
 CVehicle::~CVehicle()
 {
-	if( m_pVehicleTerminal ) {
-		delete m_pVehicleTerminal;
-		m_pVehicleTerminal = 0;
-	}
 	if( m_pSensorManager ) {
 		delete m_pSensorManager;
 		m_pSensorManager = 0;
+	}
+	if( m_pVehicleTerminal ) {
+		m_pVehicleTerminal->shutdown();
+		delete m_pVehicleTerminal;
+		m_pVehicleTerminal = 0;
 	}
 }
 
@@ -28,22 +33,23 @@ int CVehicle::initialize()
 {
 	int errCode;
 
-	std::cout << "  Initializing sensors...\n";
-	m_pSensorManager = new CSensorManager();
-	errCode = m_pSensorManager->initSensors();
-	if( errCode != ERR_OK ) {
-		std::cout << "  Sensor initialization: FAILED\n";
-		return errCode;
-	}
-	std::cout << "  Sensor initialization: SUCCESS\n";
-
 	// Initialize the terminal
+	std::cout << "Starting debug logging...\n";
 	m_pVehicleTerminal = new CTerminal();
 	errCode = m_pVehicleTerminal->init();
 	if( errCode != ERR_OK ) {
-		std::cout << "  Failed to initialize user terminal\n";
+		Terminal()->print( "  Failed to initialize user terminal\n" );
 		return errCode;
 	}
+
+	Terminal()->print( "  Initializing sensors...\n" );
+	m_pSensorManager = new CSensorManager();
+	errCode = m_pSensorManager->initSensors();
+	if( errCode != ERR_OK ) {
+		Terminal()->print( "  Sensor initialization: FAILED\n" );
+		return errCode;
+	}
+	Terminal()->print( "  Sensor initialization: SUCCESS\n" );
 
 	return ERR_OK;
 }
@@ -53,17 +59,27 @@ int CVehicle::start()
 	assert( !m_isRunning );
 
 	m_isRunning = true;
-	while( m_isRunning ) {
+	while( m_isRunning )
+	{
 		if( !m_messageQueue.empty() )
 		{
 			std::unique_ptr<message_t> pMsg  = std::move( m_messageQueue.front() );
-			terminal_msg_t *pMsgData = static_cast<terminal_msg_t*>(pMsg.get());
 
-			std::cout << "Our Copy ID: " << pMsgData->message_id << "\n";
-			std::cout << "Our Copy Importance: " << pMsgData->important << "\n";
-			std::cout << "Our Copy Timeout: " << pMsgData->timeoutMS << "\n";
-			std::cout << "Our Copy Command: " << pMsgData->commandName.c_str() << "\n";
-
+			// Sort the messages
+			switch( pMsg->message_id )
+			{
+			case MSGID_QUIT:
+				m_isRunning = false;
+				Terminal()->print( "Quitting...\n" );
+				break;
+			case MSGID_TERMINAL_MSG:
+				this->parseCommandMessage( std::move( pMsg ) );
+				break;
+			case MSGID_UNKNOWN:
+			default:
+				Terminal()->print( "WARNING: Received unknown message (ID: %d)\n", pMsg->message_id );
+				break;
+			}
 			m_messageQueue.pop();
 		}
 	}
@@ -73,15 +89,68 @@ int CVehicle::start()
 	return ERR_OK;
 }
 
-void CVehicle::postMessage( message_t &pMsg )
+void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 {
-	std::unique_ptr<message_t> msgPtr = std::make_unique<message_t>( pMsg );
+	assert( pCommandMsg );
+	assert( pCommandMsg->message_id == MSGID_TERMINAL_MSG );
 
-	terminal_msg_t *pMsgData = static_cast<terminal_msg_t*>(msgPtr.get());
+	// Cast
+	terminal_msg_t *pMsgData = static_cast<terminal_msg_t*>(pCommandMsg.get());
+	std::string cmdStr = pMsgData->command;
+	std::string cmdStrClean;
+	std::vector<std::string> tokens;
 
-	m_messageQueue.push( std::move(msgPtr) );
+	// Convert to lowercase
+	std::transform( cmdStr.begin(), cmdStr.end(), cmdStr.begin(),
+		[]( unsigned char c ) { return std::tolower( c ); } );
+	// Remove extra whitespace
+	unique_copy( cmdStr.begin(), cmdStr.end(), std::back_insert_iterator<std::string>( cmdStrClean ),
+		[]( char a, char b ) { return isspace( a ) && isspace( b ); } );
+	// Tokenize into words
+	std::string currentWord;
+	for( auto it = cmdStrClean.begin(); it != cmdStrClean.end(); it++ )
+	{
+		if( (*it) != ' ' )
+			currentWord += (*it);
+		else {
+			tokens.push_back( currentWord );
+			currentWord = "";
+		}
+	}
+	// Get last token
+	if( !currentWord.empty() )
+		tokens.push_back( currentWord );
 
-	/*std::cout << "Our Copy ID: " << ourCopy.message_id << "\n";
-	std::cout << "Our Copy Importance: " << ourCopy.important << "\n";
-	std::cout << "Our Copy Timeout: " << ourCopy.timeoutMS << "\n";*/
+	if( tokens.size() < 1 ) {
+		Terminal()->print( "Received empty command\n" );
+		return;
+	}
+	std::string commandName = tokens[0];
+
+	// Evaluate commands
+	if( commandName.compare( "quit" ) == 0 || commandName.compare( "exit" ) == 0 ) {
+		message_t quitMsg( MSGID_QUIT, true, 0 );
+		this->postMessage( std::make_unique<message_t>( quitMsg ) );
+		return;
+	}
+
+	Terminal()->print( "Received Message:\n" );
+	Terminal()->print( "\tOur Copy ID: %d\n", pMsgData->message_id );
+	Terminal()->print( "\tOur Copy Importance: %d\n", pMsgData->important );
+	Terminal()->print( "\tOur Copy Timeout: %d\n", pMsgData->timeoutMS );
+	Terminal()->print( "\tOur Copy Command: %s\n", cmdStrClean.c_str() );
+}
+
+void CVehicle::postMessage( std::unique_ptr<message_t> pMsg )
+{
+	assert( pMsg );
+
+	std::unique_lock<std::mutex> lock( m_msgLoopMutex );
+
+	m_messageQueue.push( std::move( pMsg ) );
+}
+
+CTerminal* CVehicle::getTerminal() {
+	assert( m_pVehicleTerminal );
+	return m_pVehicleTerminal;
 }
