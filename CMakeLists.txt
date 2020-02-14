@@ -2,7 +2,7 @@ cmake_minimum_required( VERSION 3.0 )
 
 set( ProjectName "canalboat" )
 
-project( ${ProjectName} )
+project( ${ProjectName} CXX )
 
 set(CompilerFlags
         CMAKE_CXX_FLAGS
