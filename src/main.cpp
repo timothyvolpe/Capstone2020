@@ -63,7 +63,5 @@ int main( int argc, char *argv[] )
 		return errCode;
 	}
 
-	Terminal()->print( "\n" );
-
 	return ERR_OK;
 }

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstring>
 #include "vehicle.h"
 #include "sensors.h"
 #include "ultrasonic.h"
@@ -8,7 +9,7 @@
 
 CSensorManager::CSensorManager()
 {
-	memset( &m_pUltrasonicSensors, 0, sizeof( CUltrasonicSensor )*ULTRASONIC_SENSOR_COUNT );
+	std::memset( &m_pUltrasonicSensors, 0, sizeof( CUltrasonicSensor )*ULTRASONIC_SENSOR_COUNT );
 	m_pLIDARSensor = 0;
 	m_pInertialMotionSensors = 0;
 	m_pGPS = 0;

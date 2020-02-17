@@ -58,6 +58,7 @@ int CVehicle::start()
 {
 	assert( !m_isRunning );
 
+	Terminal()->print( "Ready\n" );
 	m_isRunning = true;
 	while( m_isRunning )
 	{
@@ -104,7 +105,7 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 	std::transform( cmdStr.begin(), cmdStr.end(), cmdStr.begin(),
 		[]( unsigned char c ) { return std::tolower( c ); } );
 	// Remove extra whitespace
-	unique_copy( cmdStr.begin(), cmdStr.end(), std::back_insert_iterator<std::string>( cmdStrClean ),
+	std::unique_copy( cmdStr.begin(), cmdStr.end(), std::back_insert_iterator<std::string>( cmdStrClean ),
 		[]( char a, char b ) { return isspace( a ) && isspace( b ); } );
 	// Tokenize into words
 	std::string currentWord;
@@ -133,12 +134,9 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 		this->postMessage( std::make_unique<message_t>( quitMsg ) );
 		return;
 	}
-
-	Terminal()->print( "Received Message:\n" );
-	Terminal()->print( "\tOur Copy ID: %d\n", pMsgData->message_id );
-	Terminal()->print( "\tOur Copy Importance: %d\n", pMsgData->important );
-	Terminal()->print( "\tOur Copy Timeout: %d\n", pMsgData->timeoutMS );
-	Terminal()->print( "\tOur Copy Command: %s\n", cmdStrClean.c_str() );
+	else {
+		Terminal()->print( "Unknown command \'%s\'\n", commandName.c_str() );
+	}
 }
 
 void CVehicle::postMessage( std::unique_ptr<message_t> pMsg )

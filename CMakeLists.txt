@@ -1,4 +1,4 @@
-cmake_minimum_required( VERSION 3.0 )
+cmake_minimum_required( VERSION 3.1 )
 
 set( ProjectName "canalboat" )
 
@@ -34,8 +34,8 @@ include_directories( "${PROJECT_SOURCE_DIR}/include" )
 # Boost Headers
 set( BOOST_INCLUDE_DIR "NOTBOOST_INCLUDE_DIR-NOTFOUND" CACHE PATH "" )
 
-if( EXISTS ${BOOST_INCLUDE_DIR} )
-	include_directories( ${BOOST_INCLUDE_DIR} )
+if( EXISTS "${BOOST_INCLUDE_DIR}" )
+	include_directories( "${BOOST_INCLUDE_DIR}" )
 else()
 	message( FATAL_ERROR "Invalid BOOST_INCLUDE_DIR." )
 endif()
@@ -43,3 +43,10 @@ endif()
 add_executable( ${ProjectName}  
 	${Project_INC}
 	${Project_SRC} )
+
+# pthread on UNIX
+if (UNIX)
+	set( THREADS_PREFER_PTHREAD_FLAG ON )
+	find_package( Threads REQUIRED )
+	target_link_libraries( ${ProjectName} Threads::Threads )
+endif (UNIX)

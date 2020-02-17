@@ -1,3 +1,4 @@
+#include <cstddef>
 #include "def.h"
 
 const char* GetErrorString( int errCode )
