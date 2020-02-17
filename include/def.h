@@ -29,6 +29,18 @@
 /** GPS unit failed to initialize. */
 #define ERR_SENSOR_INIT_GPS				ERR_INIT_BASE + 0x4
 
+/** All I2C errors start at this value */
+#define ERR_I2C_BASE					0x2000
+/** The system could not access the I2C bus for an unknown reason */
+#define ERR_I2C_OPEN_FAILED				ERR_I2C_BASE + 0x1
+/** Access was denied to the I2C bus */
+#define ERR_I2C_ACCESS_DENIED			ERR_I2C_BASE + 0x2
+/** The given I2C path did not point to a valid bus. */
+#define ERR_I2C_INVALID_PATH			ERR_I2C_BASE + 0x3
+
+/** All SPI errors start at this value */
+#define ERR_SPI_BASE					0x3000
+
 /**
 * @brief Combines error code and error message for lookup
 */
@@ -45,6 +57,10 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_SENSOR_INIT_LIDAR, "LIDAR sensor initialization failure" },
 	{ ERR_SENSOR_INIT_IMU, "IMU sensor initialization failure" },
 	{ ERR_SENSOR_INIT_GPS, "GPS unit initialization failure" },
+
+	{ ERR_I2C_OPEN_FAILED, "The system could not access the I2C bus for an unknown reason" },
+	{ ERR_I2C_ACCESS_DENIED, "Access was denied to the I2C bus" },
+	{ ERR_I2C_INVALID_PATH, "The given I2C path did not point to a valid bus" }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])

@@ -10,17 +10,25 @@
 #include "def.h"
 #include "terminal.h"
 #include "messages.h"
+#include "wire_protocols.h"
 
 CVehicle::CVehicle() {
 	m_pVehicleTerminal = 0;
 	m_pSensorManager = 0;
 	m_isRunning = false;
+
+	m_pI2cBus = 0;
 }
 CVehicle::~CVehicle()
 {
 	if( m_pSensorManager ) {
 		delete m_pSensorManager;
 		m_pSensorManager = 0;
+	}
+	if( m_pI2cBus ) {
+		m_pI2cBus->close();
+		delete m_pI2cBus;
+		m_pI2cBus = 0;
 	}
 	if( m_pVehicleTerminal ) {
 		m_pVehicleTerminal->shutdown();
@@ -34,13 +42,23 @@ int CVehicle::initialize()
 	int errCode;
 
 	// Initialize the terminal
-	std::cout << "Starting debug logging...\n";
+	std::cout << "  Starting debug logging...\n";
 	m_pVehicleTerminal = new CTerminal();
 	errCode = m_pVehicleTerminal->init();
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "  Failed to initialize user terminal\n" );
 		return errCode;
 	}
+
+	// Open communication buses
+	Terminal()->print( "  Opening I2C bus..." );
+	m_pI2cBus = new CI2CBus();
+	errCode = m_pI2cBus->open( "/dev/i2c-1" );
+	if( errCode != ERR_OK ) {
+		Terminal()->print( "FAILED\n" );
+		return errCode;
+	}
+	Terminal()->print( "SUCCESS\n" );
 
 	Terminal()->print( "  Initializing sensors...\n" );
 	m_pSensorManager = new CSensorManager();

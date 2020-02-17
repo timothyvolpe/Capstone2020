@@ -13,6 +13,7 @@
 */
 
 class CSensorManager;
+class CI2CBus;
 
 struct message_t;
 
@@ -46,6 +47,9 @@ private:
 
 	/** Parse a terminal command input from the user. */
 	void parseCommandMessage( std::unique_ptr<message_t> pCommandMsg );
+
+	// Communication busses
+	CI2CBus *m_pI2cBus;
 public:
 	/**
 	* @brief Returns instance of vehicle singleton.

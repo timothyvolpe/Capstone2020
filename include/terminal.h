@@ -3,7 +3,7 @@
 #include <atomic>
 #include <mutex>
 #include <queue>
-#include <boost\format.hpp>
+#include <boost/format.hpp>
 
 /**
 * @file terminal.h
