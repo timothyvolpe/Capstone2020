@@ -83,6 +83,12 @@ public:
 	int initialize();
 
 	/**
+	* @brief Shutdown everything and clean up data used
+	* @details Use this instead of destructor to avoid ambiguous debug errors after main returns.
+	*/
+	void shutdown();
+
+	/**
 	* @brief Starts the message loop.
 	* @details This will begin collecting and acting on messages received from vehicle sensors, helper processes, etc.
 	* @warning This method is blocking, and will not exit until the vehicle operate ceases.

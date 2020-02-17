@@ -1,5 +1,7 @@
+#ifdef __linux__
 #include <fcntl.h>
 #include <unistd.h>
+#endif
 #include "def.h"
 #include "wire_protocols.h"
 

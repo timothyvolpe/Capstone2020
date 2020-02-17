@@ -21,20 +21,6 @@ CVehicle::CVehicle() {
 }
 CVehicle::~CVehicle()
 {
-	if( m_pSensorManager ) {
-		delete m_pSensorManager;
-		m_pSensorManager = 0;
-	}
-	if( m_pI2cBus ) {
-		m_pI2cBus->close();
-		delete m_pI2cBus;
-		m_pI2cBus = 0;
-	}
-	if( m_pVehicleTerminal ) {
-		m_pVehicleTerminal->shutdown();
-		delete m_pVehicleTerminal;
-		m_pVehicleTerminal = 0;
-	}
 }
 
 int CVehicle::initialize()
@@ -49,6 +35,7 @@ int CVehicle::initialize()
 		Terminal()->print( "  Failed to initialize user terminal\n" );
 		return errCode;
 	}
+	Terminal()->print( "Debug logging started\n" );
 
 	// Open communication buses
 	Terminal()->print( "  Opening I2C bus..." );
@@ -70,6 +57,23 @@ int CVehicle::initialize()
 	Terminal()->print( "  Sensor initialization: SUCCESS\n" );
 
 	return ERR_OK;
+}
+void CVehicle::shutdown()
+{
+	if( m_pSensorManager ) {
+		delete m_pSensorManager;
+		m_pSensorManager = 0;
+	}
+	if( m_pI2cBus ) {
+		m_pI2cBus->close();
+		delete m_pI2cBus;
+		m_pI2cBus = 0;
+	}
+	if( m_pVehicleTerminal ) {
+		m_pVehicleTerminal->shutdown();
+		delete m_pVehicleTerminal;
+		m_pVehicleTerminal = 0;
+	}
 }
 
 int CVehicle::start()
@@ -101,6 +105,7 @@ int CVehicle::start()
 			}
 			m_messageQueue.pop();
 		}
+		Terminal()->update();
 	}
 
 	m_isRunning = false;

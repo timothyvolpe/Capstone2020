@@ -19,7 +19,7 @@
 /** @brief Program entry point. */
 int main( int argc, char *argv[] )
 {
-	int errCode;
+	int errCode = ERR_OK;
 
 	std::cout << "  +========================================================================+\n";
 	std::cout << "  == Welcome to the ENEL Green Power Canal Vehicle Controller Application ==\n";
@@ -27,10 +27,10 @@ int main( int argc, char *argv[] )
 	std::cout << "\n";
 	std::cout << "   This application is meant to run on a Raspberry Pi 4 64-bit device.\n";
 	std::cout << "   It handles all of the sensor data and motion control of the canal\n"
-				 "   vehicle.\n";
+		"   vehicle.\n";
 	std::cout << "\n";
 	std::cout << "   Developed as part of a University of Massachusetts, Lowell Capstone\n"
-				 "   Project.\n";
+		"   Project.\n";
 	std::cout << "\n";
 	std::cout << "   Contributors:\n";
 	std::cout << "      19-309 ENEL Green Power 1 - Timothy Volpe\n";
@@ -47,21 +47,24 @@ int main( int argc, char *argv[] )
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "Vehicle initialization: FAILED\n" );
 		Terminal()->print( "ERROR: %s\n", GetErrorString( errCode ) );
-		return errCode;
 	}
-	Terminal()->print( "Vehicle initialization: SUCCESS\n" );
+	else
+	{
+		Terminal()->print( "Vehicle initialization: SUCCESS\n" );
 
-	// Vehicle class should now be safe for use
+		// Vehicle class should now be safe for use
 
-	Terminal()->print( "\n" );
+		Terminal()->print( "\n" );
 
-	// Start program loop
-	Terminal()->print( "Entering program loop...\n" );
-	errCode = LocalVehicle().start();
-	if( errCode != ERR_OK ) {
-		Terminal()->print( "ERROR: %s\n", GetErrorString( errCode ) );
-		return errCode;
+		// Start program loop
+		Terminal()->print( "Entering program loop...\n" );
+		errCode = LocalVehicle().start();
+		if( errCode != ERR_OK )
+			Terminal()->print( "ERROR: %s\n", GetErrorString( errCode ) );
 	}
 
-	return ERR_OK;
+	// Clean up for exit
+	LocalVehicle().shutdown();
+
+	return errCode;
 }
