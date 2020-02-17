@@ -23,9 +23,11 @@ int CTerminal::init()
 }
 void CTerminal::shutdown()
 {
-	m_threadRunning = false;
-	// Because we can't interrupt cin
-	this->print( "\nPressing enter to exit...\n" );
+	if( m_threadRunning ) {
+		m_threadRunning = false;
+		// Because we can't interrupt cin
+		this->print( "\nPress enter to exit...\n" );
+	}
 	m_inputThread.join();
 }
 

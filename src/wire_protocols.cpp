@@ -1,3 +1,5 @@
+#include <fcntl.h>
+#include <unistd.h>
 #include "def.h"
 #include "wire_protocols.h"
 
@@ -12,7 +14,7 @@ int CI2CBus::open( std::string busPath )
 {
 #ifdef __linux__
 	// Open the bus
-	m_hBusHandle = open( busPath.c_str(), O_RDWR );
+	m_hBusHandle = ::open( busPath.c_str(), O_RDWR );
 	if( m_hBusHandle == -1 )
 	{
 		if( errno == EACCES )
@@ -31,7 +33,7 @@ void CI2CBus::close()
 {
 #ifdef __linux__
 	if( m_hBusHandle >= 0 ) {
-		close( m_hBusHandle );
+		::close( m_hBusHandle );
 	}
 	m_hBusHandle = -1;
 #endif
