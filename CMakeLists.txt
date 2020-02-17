@@ -46,6 +46,8 @@ add_executable( ${ProjectName}
 
 # pthread on UNIX
 if (UNIX)
+	set_property( TARGET ${ProjectName} PROPERTY CXX_STANDARD 14 )
+
 	set( THREADS_PREFER_PTHREAD_FLAG ON )
 	find_package( Threads REQUIRED )
 	target_link_libraries( ${ProjectName} Threads::Threads )
