@@ -10,9 +10,11 @@
 #include <Windows.h>
 #elif __linux__
 #include <libgen.h>
+#include <linux/limits.h>
 #endif
 
 OutputFile::OutputFile( std::string path ) : m_outputFile( path.c_str(), std::ios::out | std::ios::trunc ) {
+	m_logFilePath = path;
 }
 
 CTerminal::CTerminal() {
@@ -51,15 +53,18 @@ int CTerminal::init()
 	std::vector<char> pathBuf;
 	size_t copied = 0;
 	do {
-		pathBuf.resize( pathBuf.size()+MAX_PATH );
-		copied = ::readlink( "/proc/self/exe", &pathBuf.at( 0 ), (DWORD)pathBuf.size() );
+		pathBuf.resize( pathBuf.size()+PATH_MAX );
+		copied = ::readlink( "/proc/self/exe", &pathBuf.at( 0 ), pathBuf.size() );
 		if( copied == -1 ) {
 			pathBuf.clear();
 			break;
 		}
 	} while( copied >= pathBuf.size() );
-	if( !pathBuf.empty() )
+	if( !pathBuf.empty() ) {
 		executableDir = std::string( pathBuf.begin(), pathBuf.end() );
+		executableDir = dirname( const_cast<char*>( executableDir.c_str() ) );
+		executableDir += "/";
+	}
 	else
 		return ERR_TERMINAL_EXEC_DIR;
 #endif
@@ -67,7 +72,7 @@ int CTerminal::init()
 	// Open the log file
 	m_outputFile = std::make_unique<OutputFile>( executableDir + LOG_FILE_TEMPNAME );
 	if( !m_outputFile.get()->m_outputFile.good() || !m_outputFile.get()->m_outputFile.is_open() ) {
-		this->print( "\t\tLog file path: %s\n", LOG_FILE_TEMPNAME );
+		this->print( "\t\tLog file path: %s\n", m_outputFile.get()->m_logFilePath.c_str() );
 		return ERR_TERMINAL_OUTPUT_FILE;
 	}
 	m_lastFlush = std::chrono::steady_clock::now();
