@@ -3,7 +3,7 @@
 #include <string>
 #ifdef __linux__
 #include <linux/i2c-dev.h>
-//#include <i2c/smbus.h>
+#include <termios.h>
 #endif
 
 /**
@@ -80,11 +80,22 @@ public:
 	/**
 	* @brief Opens a UART channel with the given name
 	* @param[in]	channelPath		A path to the UART channel to open.
+	* @param[in]	enableReceiver		Enable the RX pin.
 	* @returns Returns #ERR_OK if successfully opened handle to UART bus, or an appropriate error code if a failure occured.
 	*/
-	int open( std::string channelPath );
+	int open( std::string channelPath, bool enableReceiver );
 	/**
 	* @brief Close the UART channel handle.
 	*/
 	void close();
+
+#ifdef __linux__
+	/**
+	* @brief Sets the baud rate of the UART
+	* @details Sets the speed to the input and output lines.
+	* @param[in]	baud	The baud rate constant
+	* @returns Returns #ERR_OK if successfully opened handle to UART bus, or an appropriate error code if a failure occured.
+	*/
+	int setBaudRate( speed_t baud );
+#endif
 };

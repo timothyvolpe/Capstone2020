@@ -1,7 +1,6 @@
 #ifdef __linux__
 #include <fcntl.h>
 #include <unistd.h>
-#include <termios.h>
 #endif
 #include "def.h"
 #include "wire_protocols.h"
@@ -46,9 +45,10 @@ CUARTChannel::CUARTChannel() {
 	m_hChannelHandle = -1;
 }
 CUARTChannel::~CUARTChannel() {
+	this->close();
 }
 
-int CUARTChannel::open( std::string channelPath )
+int CUARTChannel::open( std::string channelPath, bool enableReceiver )
 {
 #ifdef __linux__
 	// Open the channel
@@ -64,6 +64,13 @@ int CUARTChannel::open( std::string channelPath )
 	}
 	// Get current options
 	::tcgetattr( m_hChannelHandle, &m_uartOptions );
+	m_uartOptions.c_cflag = CS8 | CLOCAL;
+	if( enableReceiver )
+		m_uartOptions.c_cflag |= CREAD;
+	else
+		m_uartOptions.c_cflag &= ~CREAD; 
+	tcflush( m_hChannelHandle, TCIFLUSH );
+	tcsetattr( m_hChannelHandle, TCSANOW, &m_uartOptions );
 #endif
 
 	return ERR_OK;
@@ -77,3 +84,16 @@ void CUARTChannel::close()
 	m_hChannelHandle = -1;
 #endif
 }
+
+#ifdef __linux__
+int CUARTChannel::setBaudRate( speed_t baud )
+{
+	if( cfsetispeed( &m_uartOptions, baud ) == -1 ) {
+		return ERR_UART_INVALID_BAUD;
+	}
+	if( cfsetospeed( &m_uartOptions, baud ) == -1 ) {
+		return ERR_UART_INVALID_BAUD;
+	}
+	return ERR_OK;
+}
+#endif

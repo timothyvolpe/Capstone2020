@@ -50,7 +50,12 @@ int CVehicle::initialize()
 
 	Terminal()->print( "  Connecting to motor controller 1..." );
 	m_pMotorControllerChannel = new CUARTChannel();
-	errCode = m_pMotorControllerChannel->open( "/dev/serial0" );
+	errCode = m_pMotorControllerChannel->open( "/dev/serial0", true );
+	if( errCode != ERR_OK ) {
+		Terminal()->print( "FAILED\n" );
+		return errCode;
+	}
+	errCode = m_pMotorControllerChannel->setBaudRate( B460800 );
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
 		return errCode;
@@ -73,6 +78,11 @@ void CVehicle::shutdown()
 	if( m_pSensorManager ) {
 		delete m_pSensorManager;
 		m_pSensorManager = 0;
+	}
+	if( m_pMotorControllerChannel ) {
+		m_pMotorControllerChannel->close();
+		delete m_pMotorControllerChannel;
+		m_pMotorControllerChannel = 0;
 	}
 	if( m_pI2cBus ) {
 		m_pI2cBus->close();

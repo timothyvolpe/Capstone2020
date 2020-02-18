@@ -56,6 +56,8 @@
 #define ERR_UART_ACCESS_DENIED			ERR_UART_BASE + 0x2
 /** The given UART path did not point to a valid bus. */
 #define ERR_UART_INVALID_PATH			ERR_UART_BASE + 0x3
+/** The given baud rate is unsupported. */
+#define ERR_UART_INVALID_BAUD			ERR_UART_BASE + 0x4
 
 
 /**
@@ -85,7 +87,8 @@ static const error_message_t ErrorMessageTable[] = {
 
 	{ ERR_UART_OPEN_FAILED, "The system could not access the UART channel for an unknown reason." },
 	{ ERR_UART_ACCESS_DENIED, "Access was denied to the UART channel." },
-	{ ERR_UART_INVALID_PATH, "The given UART path did not point to a valid channel." }
+	{ ERR_UART_INVALID_PATH, "The given UART path did not point to a valid channel." },
+	{ ERR_UART_INVALID_BAUD, "The given baud rate is unsupported." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])
