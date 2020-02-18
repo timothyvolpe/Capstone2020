@@ -18,6 +18,7 @@ CVehicle::CVehicle() {
 	m_isRunning = false;
 
 	m_pI2cBus = 0;
+	m_pMotorControllerChannel = 0;
 }
 CVehicle::~CVehicle()
 {
@@ -41,6 +42,15 @@ int CVehicle::initialize()
 	Terminal()->print( "  Opening I2C bus..." );
 	m_pI2cBus = new CI2CBus();
 	errCode = m_pI2cBus->open( "/dev/i2c-1" );
+	if( errCode != ERR_OK ) {
+		Terminal()->print( "FAILED\n" );
+		return errCode;
+	}
+	Terminal()->print( "SUCCESS\n" );
+
+	Terminal()->print( "  Connecting to motor controller 1..." );
+	m_pMotorControllerChannel = new CUARTChannel();
+	errCode = m_pMotorControllerChannel->open( "/dev/serial0" );
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
 		return errCode;

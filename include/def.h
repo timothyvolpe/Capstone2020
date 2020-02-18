@@ -48,6 +48,15 @@
 /** All SPI errors start at this value */
 #define ERR_SPI_BASE					0x4000
 
+/** All UART errors start at this value */
+#define ERR_UART_BASE					0x5000
+/** The system could not access the UART channel for an unknown reason */
+#define ERR_UART_OPEN_FAILED			ERR_UART_BASE + 0x1
+/** Access was denied to the UART channel */
+#define ERR_UART_ACCESS_DENIED			ERR_UART_BASE + 0x2
+/** The given UART path did not point to a valid bus. */
+#define ERR_UART_INVALID_PATH			ERR_UART_BASE + 0x3
+
 
 /**
 * @brief Combines error code and error message for lookup
@@ -72,7 +81,11 @@ static const error_message_t ErrorMessageTable[] = {
 
 	{ ERR_I2C_OPEN_FAILED, "The system could not access the I2C bus for an unknown reason." },
 	{ ERR_I2C_ACCESS_DENIED, "Access was denied to the I2C bus." },
-	{ ERR_I2C_INVALID_PATH, "The given I2C path did not point to a valid bus." }
+	{ ERR_I2C_INVALID_PATH, "The given I2C path did not point to a valid bus." },
+
+	{ ERR_UART_OPEN_FAILED, "The system could not access the UART channel for an unknown reason." },
+	{ ERR_UART_ACCESS_DENIED, "Access was denied to the UART channel." },
+	{ ERR_UART_INVALID_PATH, "The given UART path did not point to a valid channel." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])
