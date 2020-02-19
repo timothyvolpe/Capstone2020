@@ -15,6 +15,7 @@
 class CSensorManager;
 class CI2CBus;
 class CUARTChannel;
+class CMotorController;
 
 struct message_t;
 
@@ -52,6 +53,9 @@ private:
 	// Communication lines
 	CI2CBus *m_pI2cBus;
 	CUARTChannel *m_pMotorControllerChannel;
+
+	CMotorController *m_pMotorControllerLarge;
+	CMotorController *m_pMotorControllerSmall;
 public:
 	/**
 	* @brief Returns instance of vehicle singleton.

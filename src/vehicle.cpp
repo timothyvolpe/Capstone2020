@@ -11,6 +11,7 @@
 #include "terminal.h"
 #include "messages.h"
 #include "wire_protocols.h"
+#include "motor.h"
 
 CVehicle::CVehicle() {
 	m_pVehicleTerminal = 0;
@@ -19,6 +20,9 @@ CVehicle::CVehicle() {
 
 	m_pI2cBus = 0;
 	m_pMotorControllerChannel = 0;
+
+	m_pMotorControllerLarge = 0;
+	m_pMotorControllerSmall = 0;
 }
 CVehicle::~CVehicle()
 {
@@ -41,15 +45,20 @@ int CVehicle::initialize()
 	// Open communication buses
 	Terminal()->print( "  Opening I2C bus..." );
 	m_pI2cBus = new CI2CBus();
+#ifdef __linux__
 	errCode = m_pI2cBus->open( "/dev/i2c-1" );
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
 		return errCode;
 	}
 	Terminal()->print( "SUCCESS\n" );
+#elif WIN32
+	Terminal()->print( "Ignored in windows\n" );
+#endif
 
-	Terminal()->print( "  Connecting to motor controller 1..." );
+	Terminal()->print( "  Setting up motor UART..." );
 	m_pMotorControllerChannel = new CUARTChannel();
+#ifdef __linux__
 	errCode = m_pMotorControllerChannel->open( "/dev/serial1", true, false, false, false );
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
@@ -66,7 +75,11 @@ int CVehicle::initialize()
 		return errCode; 
 	}
 	Terminal()->print( "SUCCESS\n" );
+#elif WIN32
+	Terminal()->print( "Ignored on windows\n" );
+#endif
 
+	// Sensors
 	Terminal()->print( "  Initializing sensors...\n" );
 	m_pSensorManager = new CSensorManager();
 	errCode = m_pSensorManager->initSensors();
@@ -76,10 +89,42 @@ int CVehicle::initialize()
 	}
 	Terminal()->print( "  Sensor initialization: SUCCESS\n" );
 
+	// Motor Controllers
+	Terminal()->print( "  Initializing motor controllers...\n" );
+	// Large controller
+	m_pMotorControllerLarge = new CMotorController( m_pMotorControllerChannel );
+	Terminal()->print( "    Large motor controller initialization... " );
+	errCode = m_pMotorControllerLarge->init();
+	if( errCode != ERR_OK ) {
+		Terminal()->print( "FAILED\n" );
+		return errCode;
+	}
+	Terminal()->print( "SUCCESS\n" );
+	// Small controller
+	m_pMotorControllerSmall = new CMotorController( m_pMotorControllerChannel );
+	Terminal()->print( "    Small motor controller initialization... " );
+	errCode = m_pMotorControllerSmall->init();
+	if( errCode != ERR_OK ) {
+		Terminal()->print( "FAILED\n" );
+		return errCode;
+	}
+	Terminal()->print( "SUCCESS\n" );
+	Terminal()->print( "  Motor controller initialization: SUCCESS\n" );
+
 	return ERR_OK;
 }
 void CVehicle::shutdown()
 {
+	if( m_pMotorControllerSmall ) {
+		m_pMotorControllerSmall->shutdown();
+		delete m_pMotorControllerSmall;
+		m_pMotorControllerSmall = 0;
+	}
+	if( m_pMotorControllerLarge ) {
+		m_pMotorControllerLarge->shutdown();
+		delete m_pMotorControllerLarge;
+		m_pMotorControllerLarge = 0;
+	}
 	if( m_pSensorManager ) {
 		delete m_pSensorManager;
 		m_pSensorManager = 0;
