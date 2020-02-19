@@ -70,6 +70,8 @@
 #define ERR_UART_SET_CFLAG				ERR_UART_BASE + 0x8
 /** Failed to set the UART read timetout. */
 #define ERR_UART_SET_READ_TIMEOUT		ERR_UART_BASE + 0x9
+/** The UART channel is already open. */
+#define ERR_UART_ALREADY_OPEN			ERR_UART_BASE + 0xA
 
 /**
 * @brief Combines error code and error message for lookup
@@ -105,7 +107,8 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_UART_SET_IFLAG, "Failed to set the UART input flags." },
 	{ ERR_UART_SET_OFLAG, "Failed to set the UART output flags." },
 	{ ERR_UART_SET_CFLAG, "Failed to set the UART control flags." },
-	{ ERR_UART_SET_READ_TIMEOUT, "Failed to set the UART read timetout." }
+	{ ERR_UART_SET_READ_TIMEOUT, "Failed to set the UART read timetout." },
+	{ ERR_UART_ALREADY_OPEN, "The UART channel is already open." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])

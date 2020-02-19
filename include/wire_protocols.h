@@ -1,6 +1,9 @@
 #pragma once
 
 #include <string>
+#include <thread>
+#include <atomic>
+#include <mutex>
 #ifdef __linux__
 #include <linux/i2c-dev.h>
 #include <termios.h>
@@ -54,6 +57,7 @@ public:
 /**
 * @brief Handles a single UART channel.
 * @details This can handle one device connected to the UART channel.
+* 	The device will poll for UART events in a seperate thread, so that it is non-blocking.
 *
 * @author Timothy Volpe
 * @date 2/27/2020
@@ -62,6 +66,9 @@ class CUARTChannel
 {
 private:
 	int m_hChannelHandle;
+	
+	std::thread m_uartThread;
+	std::atomic<bool> m_threadRunning;
 
 #ifdef __linux__
 	termios m_uartOptions;
@@ -69,6 +76,7 @@ private:
 	bool setAttributes();
 #endif
 
+	void uartThreadMain();
 public:
 	/* Default constructor */
 	CUARTChannel();
@@ -93,6 +101,12 @@ public:
 	* @brief Close the UART channel handle.
 	*/
 	void close();
+	
+	/**
+	* @brief Returns true if a channel is open.
+	* @returns True if the channel is open.
+	*/
+	bool isOpen();
 
 #ifdef __linux__
 	/**

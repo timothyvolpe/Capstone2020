@@ -48,8 +48,18 @@ CUARTChannel::~CUARTChannel() {
 	this->close();
 }
 
+void CUARTChannel::uartThreadMain()
+{
+	while( m_threadRunning ) {
+		continue;
+	}
+}
+
 int CUARTChannel::open( std::string channelPath, bool enableReceiver, bool twoStopBits, bool parity, bool rtscts )
 {
+	if( this->isOpen() )
+		return ERR_UART_ALREADY_OPEN;
+	
 #ifdef __linux__
 	// Open the channel
 	m_hChannelHandle = ::open( channelPath.c_str(), O_RDWR | O_NOCTTY | O_NDELAY );
@@ -89,16 +99,30 @@ int CUARTChannel::open( std::string channelPath, bool enableReceiver, bool twoSt
 		return ERR_UART_SET_ATTRIB;
 #endif
 
+	// Start the thread
+	m_threadRunning = true;
+	m_uartThread = std::thread( &CUARTChannel::uartThreadMain, this );
+
 	return ERR_OK;
 }
 void CUARTChannel::close()
 {
 #ifdef __linux__
+	// Stop thread
+	if( m_threadRunning ) {
+		m_threadRunning = false;
+		m_uartThread.join();
+	}
+	// Close channel
 	if( m_hChannelHandle >= 0 ) {
 		::close( m_hChannelHandle );
 	}
 	m_hChannelHandle = -1;
 #endif
+}
+
+bool CUARTChannel::isOpen() {
+	return (m_hChannelHandle >= 0);
 }
 
 #ifdef __linux__
