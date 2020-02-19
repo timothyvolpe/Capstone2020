@@ -58,7 +58,18 @@
 #define ERR_UART_INVALID_PATH			ERR_UART_BASE + 0x3
 /** The given baud rate is unsupported. */
 #define ERR_UART_INVALID_BAUD			ERR_UART_BASE + 0x4
-
+/** Failed to set the UART attributes. */
+#define ERR_UART_SET_ATTRIB				ERR_UART_BASE + 0x5
+/** Failed to flush the UART channel. */
+#define ERR_UART_FLUSH_CHANNEL			ERR_UART_BASE + 0x6
+/** Failed to set the UART input flags. */
+#define ERR_UART_SET_IFLAG				ERR_UART_BASE + 0x7
+/** Failed to set the UART output flags. */
+#define ERR_UART_SET_OFLAG				ERR_UART_BASE + 0x8
+/** Failed to set the UART control flags. */
+#define ERR_UART_SET_CFLAG				ERR_UART_BASE + 0x8
+/** Failed to set the UART read timetout. */
+#define ERR_UART_SET_READ_TIMEOUT		ERR_UART_BASE + 0x9
 
 /**
 * @brief Combines error code and error message for lookup
@@ -88,7 +99,13 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_UART_OPEN_FAILED, "The system could not access the UART channel for an unknown reason." },
 	{ ERR_UART_ACCESS_DENIED, "Access was denied to the UART channel." },
 	{ ERR_UART_INVALID_PATH, "The given UART path did not point to a valid channel." },
-	{ ERR_UART_INVALID_BAUD, "The given baud rate is unsupported." }
+	{ ERR_UART_INVALID_BAUD, "The given baud rate is unsupported." },
+	{ ERR_UART_SET_ATTRIB, "Failed to set the UART attributes." },
+	{ ERR_UART_FLUSH_CHANNEL, "Failed to flush the UART channel." },
+	{ ERR_UART_SET_IFLAG, "Failed to set the UART input flags." },
+	{ ERR_UART_SET_OFLAG, "Failed to set the UART output flags." },
+	{ ERR_UART_SET_CFLAG, "Failed to set the UART control flags." },
+	{ ERR_UART_SET_READ_TIMEOUT, "Failed to set the UART read timetout." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])

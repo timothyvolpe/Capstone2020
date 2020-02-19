@@ -48,7 +48,7 @@ CUARTChannel::~CUARTChannel() {
 	this->close();
 }
 
-int CUARTChannel::open( std::string channelPath, bool enableReceiver )
+int CUARTChannel::open( std::string channelPath, bool enableReceiver, bool twoStopBits, bool parity, bool rtscts )
 {
 #ifdef __linux__
 	// Open the channel
@@ -64,13 +64,29 @@ int CUARTChannel::open( std::string channelPath, bool enableReceiver )
 	}
 	// Get current options
 	::tcgetattr( m_hChannelHandle, &m_uartOptions );
-	m_uartOptions.c_cflag = CS8 | CLOCAL;
+	m_uartOptions.c_cflag = CS8 | CLOCAL;	// message length 8 bits
 	if( enableReceiver )
-		m_uartOptions.c_cflag |= CREAD;
+		m_uartOptions.c_cflag |= CREAD;	
 	else
 		m_uartOptions.c_cflag &= ~CREAD; 
-	tcflush( m_hChannelHandle, TCIFLUSH );
-	tcsetattr( m_hChannelHandle, TCSANOW, &m_uartOptions );
+	if( twoStopBits )
+		m_uartOptions.c_cflag |= CSTOPB;
+	else
+		m_uartOptions.c_cflag &= ~CSTOPB;
+	if( parity )
+		m_uartOptions.c_cflag |= (PARENB | PARODD);
+	else
+		m_uartOptions.c_cflag &= ~(PARENB | PARODD);
+	if( rtscts )
+		m_uartOptions.c_cflag |= CRTSCTS;
+	else
+		m_uartOptions.c_cflag &= ~CRTSCTS;
+		
+	m_uartOptions.c_cc[VMIN] = 0;
+	m_uartOptions.c_cc[VTIME] = 5 * 10;	// 5 seconds (50 deciseconds)
+		
+	if( !this->setAttributes() )
+		return ERR_UART_SET_ATTRIB;
 #endif
 
 	return ERR_OK;
@@ -86,6 +102,22 @@ void CUARTChannel::close()
 }
 
 #ifdef __linux__
+int CUARTChannel::flush()
+{
+	if( tcflush( m_hChannelHandle, TCIOFLUSH ) == -1 )
+		return ERR_UART_FLUSH_CHANNEL;
+	return ERR_OK;
+}
+
+bool CUARTChannel::setAttributes()
+{
+	if( tcsetattr( m_hChannelHandle, TCSAFLUSH, &m_uartOptions ) == -1 )
+		return false;
+	if( this->flush() != ERR_OK )
+		return false;
+	return true;
+}
+
 int CUARTChannel::setBaudRate( speed_t baud )
 {
 	if( cfsetispeed( &m_uartOptions, baud ) == -1 ) {
@@ -94,6 +126,47 @@ int CUARTChannel::setBaudRate( speed_t baud )
 	if( cfsetospeed( &m_uartOptions, baud ) == -1 ) {
 		return ERR_UART_INVALID_BAUD;
 	}
+	if( !this->setAttributes() )
+		return ERR_UART_SET_ATTRIB;
+	
 	return ERR_OK;
+}
+
+int CUARTChannel::setReadTimeout( cc_t deciseconds )
+{
+	m_uartOptions.c_cc[VTIME] = deciseconds;
+	if( !this->setAttributes() )
+		return ERR_UART_SET_READ_TIMEOUT;
+	return ERR_OK;
+}
+
+int CUARTChannel::setiFlag( tcflag_t iflag ) {
+	m_uartOptions.c_iflag = iflag;
+	if( !this->setAttributes() )
+		return ERR_UART_SET_IFLAG;
+	return ERR_OK;
+}
+tcflag_t CUARTChannel::getiFlag() {
+	return m_uartOptions.c_iflag;
+}
+
+int CUARTChannel::setoFlag( tcflag_t oflag ) {
+	m_uartOptions.c_oflag = oflag;
+	if( !this->setAttributes() )
+		return ERR_UART_SET_OFLAG;
+	return ERR_OK;
+}
+tcflag_t CUARTChannel::getoFlag() {
+	return m_uartOptions.c_oflag;
+}
+
+int CUARTChannel::setcFlag( tcflag_t oflag ) {
+	m_uartOptions.c_cflag = oflag;
+	if( !this->setAttributes() )
+		return ERR_UART_SET_OFLAG;
+	return ERR_OK;
+}
+tcflag_t CUARTChannel::getcFlag() {
+	return m_uartOptions.c_cflag;
 }
 #endif

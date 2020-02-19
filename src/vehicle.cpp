@@ -50,15 +50,20 @@ int CVehicle::initialize()
 
 	Terminal()->print( "  Connecting to motor controller 1..." );
 	m_pMotorControllerChannel = new CUARTChannel();
-	errCode = m_pMotorControllerChannel->open( "/dev/serial0", true );
+	errCode = m_pMotorControllerChannel->open( "/dev/serial1", true, false, false, false );
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
 		return errCode;
 	}
 	errCode = m_pMotorControllerChannel->setBaudRate( B460800 );
+	errCode = m_pMotorControllerChannel->setiFlag( m_pMotorControllerChannel->getiFlag()
+		& ~(INPCK | IXON | IXOFF | IXANY)
+		);	// No parity, no XON/XOFF
+	errCode = m_pMotorControllerChannel->setoFlag( 0 );
+	errCode = m_pMotorControllerChannel->setReadTimeout( 50 );
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
-		return errCode;
+		return errCode; 
 	}
 	Terminal()->print( "SUCCESS\n" );
 
