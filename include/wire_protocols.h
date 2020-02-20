@@ -4,6 +4,8 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <vector>
+#include <queue>
 #ifdef __linux__
 #include <linux/i2c-dev.h>
 #include <termios.h>
@@ -65,10 +67,17 @@ public:
 class CUARTChannel
 {
 private:
+	typedef std::queue<std::vector<unsigned char>> WriteQueue;
+
 	int m_hChannelHandle;
 	
 	std::thread m_uartThread;
 	std::atomic<bool> m_threadRunning;
+
+	std::mutex m_writeMutex;
+	WriteQueue m_writeBuffer;
+	std::mutex m_readMutex;
+	std::queue<unsigned char> m_readBuffer;
 
 #ifdef __linux__
 	termios m_uartOptions;
@@ -108,9 +117,27 @@ public:
 	*/
 	bool isOpen();
 
+	/**
+	* @brief Write to the UART channel.
+	* @details This will add buffer to the write buffer, to be sent as soon as the channel is avaliable.
+	* @param[in]	buffer	Data to be added to the write buffer.
+	* @returns Returns true if successfully added to queue, false if channel was not open.
+	*/
+	bool write( std::vector<unsigned char> buffer );
+
+	/**
+	* @brief Reads a certain number of bytes from the read buffer.
+	* @details This will read count number of bytes from the read buffer and return them. If there are not count
+	*	bytes in the buffer, the entire contents of the read buffer will be returned. The read buffer is filled continuously
+	*	as data is read from the port. 
+	* @param[in]	count	The maximum number of bytes to be read.
+	* @returns A buffer containing up to count number of bytes, however an empty buffer may be returned if no bytes were available.
+	*/
+	std::vector<unsigned char> read( size_t count );
+
 #ifdef __linux__
 	/**
-	* @brief Flushes the input and output.
+	* @brief Flushes the input and output, clears buffers.
 	* @returns Returns #ERR_OK if successfully flushed the channel, or an appropriate error code if a failure occured.
 	*/
 	int flush();

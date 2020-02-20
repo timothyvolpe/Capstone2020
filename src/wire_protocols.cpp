@@ -125,9 +125,41 @@ bool CUARTChannel::isOpen() {
 	return (m_hChannelHandle >= 0);
 }
 
+bool CUARTChannel::write( std::vector<unsigned char> buffer )
+{
+	if( !this->isOpen() ) 
+		return false;
+
+	std::unique_lock<std::mutex> lock( m_writeMutex );
+	m_writeBuffer.push( buffer );
+
+	return true;
+}
+std::vector<unsigned char> CUARTChannel::read( size_t count )
+{
+	std::queue<unsigned char> readBufferCopy;
+	std::vector<unsigned char> buffer;
+
+	std::unique_lock<std::mutex> lock( m_readMutex );
+	readBufferCopy = m_readBuffer;
+	lock.release();
+
+	if( count > readBufferCopy.size() )
+		count = readBufferCopy.size();
+	buffer.reserve( count );
+	for( unsigned int i = 0; i < count; i++ ) {
+		buffer.push_back( readBufferCopy.front() );
+		readBufferCopy.pop();
+	}
+	return buffer;
+}
+
 #ifdef __linux__
 int CUARTChannel::flush()
 {
+	m_writeBuffer = WriteQueue();
+	m_readBuffer = std::queue<unsigned char>();
+
 	if( tcflush( m_hChannelHandle, TCIOFLUSH ) == -1 )
 		return ERR_UART_FLUSH_CHANNEL;
 	return ERR_OK;
