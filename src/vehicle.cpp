@@ -43,7 +43,7 @@ int CVehicle::initialize()
 	Terminal()->print( "Debug logging started\n" );
 
 	// Open communication buses
-	Terminal()->print( "  Opening I2C bus..." );
+	Terminal()->printImportant( "  Opening I2C bus..." );
 	m_pI2cBus = new CI2CBus();
 #ifdef __linux__
 	errCode = m_pI2cBus->open( "/dev/i2c-1" );
@@ -56,7 +56,7 @@ int CVehicle::initialize()
 	Terminal()->print( "Ignored in windows\n" );
 #endif
 
-	Terminal()->print( "  Setting up motor UART..." );
+	Terminal()->printImportant( "  Setting up motor UART..." );
 	m_pMotorControllerChannel = new CUARTChannel();
 #ifdef __linux__
 	errCode = m_pMotorControllerChannel->open( "/dev/serial1", true, false, false, false );
@@ -80,7 +80,7 @@ int CVehicle::initialize()
 #endif
 
 	// Sensors
-	Terminal()->print( "  Initializing sensors...\n" );
+	Terminal()->printImportant( "  Initializing sensors...\n" );
 	m_pSensorManager = new CSensorManager();
 	errCode = m_pSensorManager->initSensors();
 	if( errCode != ERR_OK ) {
@@ -90,10 +90,10 @@ int CVehicle::initialize()
 	Terminal()->print( "  Sensor initialization: SUCCESS\n" );
 
 	// Motor Controllers
-	Terminal()->print( "  Initializing motor controllers...\n" );
+	Terminal()->printImportant( "  Initializing motor controllers...\n" );
 	// Large controller
-	m_pMotorControllerLarge = new CMotorController( m_pMotorControllerChannel );
-	Terminal()->print( "    Large motor controller initialization... " );
+	m_pMotorControllerLarge = new CMotorController( m_pMotorControllerChannel, ROBOCLAW_60A_ADDRESS );
+	Terminal()->printImportant( "    Large motor controller initialization... " );
 	errCode = m_pMotorControllerLarge->init();
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
@@ -101,20 +101,20 @@ int CVehicle::initialize()
 	}
 	Terminal()->print( "SUCCESS\n" );
 	// Small controller
-	m_pMotorControllerSmall = new CMotorController( m_pMotorControllerChannel );
-	Terminal()->print( "    Small motor controller initialization... " );
+	m_pMotorControllerSmall = new CMotorController( m_pMotorControllerChannel, ROBOCLAW_30A_ADDRESS);
+	Terminal()->printImportant( "    Small motor controller initialization... " );
 	errCode = m_pMotorControllerSmall->init();
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
 		return errCode;
 	}
 	Terminal()->print( "SUCCESS\n" );
-	Terminal()->print( "  Motor controller initialization: SUCCESS\n" );
+	Terminal()->printImportant( "  Motor controller initialization: SUCCESS\n" );
 
 	return ERR_OK;
 }
 void CVehicle::shutdown()
-{
+{	
 	if( m_pMotorControllerSmall ) {
 		m_pMotorControllerSmall->shutdown();
 		delete m_pMotorControllerSmall;
@@ -226,6 +226,10 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 		message_t quitMsg( MSGID_QUIT, true, 0 );
 		this->postMessage( std::make_unique<message_t>( quitMsg ) );
 		return;
+	}
+	if( commandName.compare( "test" ) == 0 ) {
+		Terminal()->printImportant( "Motor Forward!\n" );
+		m_pMotorControllerLarge->forward( RoboClawChannels::CHANNEL1, 64 );
 	}
 	else {
 		Terminal()->print( "Unknown command \'%s\'\n", commandName.c_str() );

@@ -1,9 +1,14 @@
 #ifdef __linux__
 #include <fcntl.h>
 #include <unistd.h>
+#include <poll.h>
+#include <sys/ioctl.h>
 #endif
+#include <assert.h>
 #include "def.h"
 #include "wire_protocols.h"
+#include "vehicle.h"
+#include "terminal.h"
 
 CI2CBus::CI2CBus() {
 	m_hBusHandle = -1;
@@ -41,8 +46,14 @@ void CI2CBus::close()
 #endif
 }
 
-CUARTChannel::CUARTChannel() {
+CUARTChannel::CUARTChannel()
+{
 	m_hChannelHandle = -1;
+	m_channelError = 0;
+	
+	m_threadRunning = 0;
+	m_threadHeartbeat = 0;
+	m_lastThreadHeartbeat = 0;
 }
 CUARTChannel::~CUARTChannel() {
 	this->close();
@@ -50,9 +61,142 @@ CUARTChannel::~CUARTChannel() {
 
 void CUARTChannel::uartThreadMain()
 {
-	while( m_threadRunning ) {
-		continue;
+	int events;
+	pollfd fileDesc;
+	bool bytesAtPort, writeAvail;
+	
+	DebugMessage( "UART THREAD ENTER\n" );
+	
+	assert( m_hChannelHandle );
+	
+	fileDesc.fd = m_hChannelHandle;
+	fileDesc.events = POLLIN | POLLOUT | POLLERR;
+	
+	bytesAtPort = false;
+	writeAvail = false;
+	
+	try
+	{
+		while( m_threadRunning )
+		{		
+			// Check for serial events
+			events = poll( &fileDesc, 1, 0 );
+			if( events == -1 )
+			{
+				if( errno == EFAULT || errno == EINVAL || errno == ENOMEM )
+				{
+					// Fatal error
+					m_channelError = ERR_UART_POLL;
+					m_threadRunning = false;
+					break;
+				}
+			}
+			if( events > 0 )
+			{
+				DebugMessage( "message\n" );
+				
+				// Read some bytes
+				if( fileDesc.revents & POLLIN ) {
+					bytesAtPort = true;
+					std::cout << "READ\n";
+				}
+				// Write some bytes
+				if( fileDesc.revents & POLLOUT ) {
+					writeAvail = true;
+					std::cout << "WRITE\n";
+				}
+				// Error
+				if( fileDesc.revents & POLLERR ) {
+					m_channelError = ERR_UART_POLL;
+					m_threadRunning = false;
+					break;
+				}
+			}
+			else
+				continue; // Can't read or write, so do nothing
+				
+			if( bytesAtPort )
+			{
+				std::unique_lock<std::mutex> lock( m_flushLock );
+				
+				// Check the number of bytes at the port
+				unsigned long byteCount;
+				if( ioctl( m_hChannelHandle, FIONREAD, &byteCount ) == -1 ) {
+					m_channelError = ERR_UART_READ;
+					m_threadRunning = false;
+					break;
+				}
+				if( byteCount <= 0 )
+					bytesAtPort = false;
+				else {
+					std::vector<unsigned char> buffer;
+					ssize_t actualBytesRead;
+					buffer.resize( byteCount );
+					actualBytesRead = ::read( m_hChannelHandle, &buffer[0], byteCount );
+					if( actualBytesRead == -1 ) {
+						if( errno != EINTR ) {
+							m_channelError = ERR_UART_READ;
+							m_threadRunning = false;
+							break;
+						}
+					}
+					else if( actualBytesRead > 0 ) {
+						buffer.resize( actualBytesRead );
+						for( auto it = buffer.begin(); it != buffer.end(); it++ )
+							m_readBuffer.push( (*it) );
+					}
+				}
+				
+				lock.unlock();
+			}
+			if( writeAvail && m_writeBuffer.size() > 0 )
+			{
+				DebugMessage( "Writing...\n" );
+				
+				// Write one item
+				std::vector<unsigned char> buffer = m_writeBuffer.front();
+				size_t bufferSize = buffer.size();
+				ssize_t bytesWritten = 0;
+				int attempts = 0;
+				m_writeBuffer.pop();
+				
+				// Try to write all the bytes
+				std::unique_lock<std::mutex> lock( m_flushLock );
+				do
+				{
+					ssize_t curBytesWritten;
+					curBytesWritten = ::write( m_hChannelHandle, &buffer[0], buffer.size() );
+					if( curBytesWritten <= 0 )
+					{
+						attempts++;
+						if( attempts >= UART_WRITE_ATTEMPS )
+							break;
+						if( errno != EINTR | errno != EAGAIN ) {
+							m_channelError = ERR_UART_READ;
+							m_threadRunning = false;
+							break;
+						}
+					}
+					else {
+						bytesWritten += curBytesWritten;
+						if( bytesWritten < bufferSize )
+							std::this_thread::sleep_for( std::chrono::milliseconds(UART_WRITE_WAIT_MS) ); 
+					}
+				} while( bytesWritten < bufferSize );
+				lock.unlock();
+				
+				writeAvail = false;
+			}
+		}
 	}
+	catch(const std::exception &e) {
+		Terminal()->printImportant( "UART thread encountered an exception and had to stop: %s", e.what() );
+	}
+	catch(...) {
+		Terminal()->printImportant( "UART thread encountered an unknown exception and had to stop." );
+	}
+	
+	DebugMessage( "UART THREAD EXIT\n" );
 }
 
 int CUARTChannel::open( std::string channelPath, bool enableReceiver, bool twoStopBits, bool parity, bool rtscts )
@@ -62,7 +206,7 @@ int CUARTChannel::open( std::string channelPath, bool enableReceiver, bool twoSt
 	
 #ifdef __linux__
 	// Open the channel
-	m_hChannelHandle = ::open( channelPath.c_str(), O_RDWR | O_NOCTTY | O_NDELAY );
+	m_hChannelHandle = ::open( channelPath.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK );
 	if( m_hChannelHandle == -1 )
 	{
 		if( errno == EACCES )
@@ -72,6 +216,7 @@ int CUARTChannel::open( std::string channelPath, bool enableReceiver, bool twoSt
 		else
 			return ERR_UART_OPEN_FAILED;
 	}
+	
 	// Get current options
 	::tcgetattr( m_hChannelHandle, &m_uartOptions );
 	m_uartOptions.c_cflag = CS8 | CLOCAL;	// message length 8 bits
@@ -101,6 +246,9 @@ int CUARTChannel::open( std::string channelPath, bool enableReceiver, bool twoSt
 
 	// Start the thread
 	m_threadRunning = true;
+	m_channelError = 0;
+	m_threadHeartbeat = 0;
+	m_lastThreadHeartbeat = 0;
 	m_uartThread = std::thread( &CUARTChannel::uartThreadMain, this );
 
 	return ERR_OK;
@@ -130,7 +278,7 @@ bool CUARTChannel::write( std::vector<unsigned char> buffer )
 	if( !this->isOpen() ) 
 		return false;
 
-	std::unique_lock<std::mutex> lock( m_writeMutex );
+	std::lock_guard<std::mutex> lock( m_writeMutex );
 	m_writeBuffer.push( buffer );
 
 	return true;
@@ -142,7 +290,7 @@ std::vector<unsigned char> CUARTChannel::read( size_t count )
 
 	std::unique_lock<std::mutex> lock( m_readMutex );
 	readBufferCopy = m_readBuffer;
-	lock.release();
+	lock.unlock();
 
 	if( count > readBufferCopy.size() )
 		count = readBufferCopy.size();
@@ -160,6 +308,8 @@ int CUARTChannel::flush()
 	m_writeBuffer = WriteQueue();
 	m_readBuffer = std::queue<unsigned char>();
 
+	std::lock_guard<std::mutex> lock( m_flushLock );
+	
 	if( tcflush( m_hChannelHandle, TCIOFLUSH ) == -1 )
 		return ERR_UART_FLUSH_CHANNEL;
 	return ERR_OK;
@@ -167,10 +317,13 @@ int CUARTChannel::flush()
 
 bool CUARTChannel::setAttributes()
 {
+	std::unique_lock<std::mutex> lock( m_flushLock );
 	if( tcsetattr( m_hChannelHandle, TCSAFLUSH, &m_uartOptions ) == -1 )
 		return false;
+	lock.unlock();
 	if( this->flush() != ERR_OK )
 		return false;
+
 	return true;
 }
 

@@ -108,4 +108,17 @@ public:
 		std::unique_lock<std::mutex> lock( m_logQueueLock );
 		m_logQueue.push( outstring );
 	}
+	
+	/**
+	* @brief Same as CTerminal::print, but forces std::cout to flush
+	* @details Use this to ensure that a line is printed even if the program crashes before the next flush.
+	* @param[in]	format		The format string
+	* @param[in]	args		The variables to insert into the format string
+	*/
+	template<typename... Args>
+	void printImportant( std::string format, Args... args )
+	{
+		this->print( format, args... );
+		std::cout << std::flush;
+	}
 };

@@ -131,7 +131,8 @@ void CTerminal::update()
 
 void CTerminal::inputThreadMain()
 {
-	//std::cin
+	DebugMessage( "TERMINAL THREAD ENTER\n" );
+	
 	while( m_threadRunning )
 	{
 		std::string userInput;
@@ -146,4 +147,6 @@ void CTerminal::inputThreadMain()
 			LocalVehicle().postMessage( std::make_unique<terminal_msg_t>( termMsg ) );
 		}
 	}
+	
+	DebugMessage( "TERMINAL THREAD EXIT\n" );
 }

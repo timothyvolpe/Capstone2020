@@ -12,6 +12,9 @@
 * @date 1/29/2020
 */
 
+#define ROBOCLAW_60A_ADDRESS 0x80
+#define ROBOCLAW_30A_ADDRESS 0x80
+
 class CSensorManager;
 class CI2CBus;
 class CUARTChannel;

@@ -10,6 +10,8 @@
 * @date 1/30/2020
 */
 
+#define DebugMessage( msg ) std::cout << msg << std::flush
+
 /////////////////
 // Error Codes //
 /////////////////
@@ -72,6 +74,13 @@
 #define ERR_UART_SET_READ_TIMEOUT		ERR_UART_BASE + 0x9
 /** The UART channel is already open. */
 #define ERR_UART_ALREADY_OPEN			ERR_UART_BASE + 0xA
+/** The poll() operation failed. */
+#define ERR_UART_POLL					ERR_UART_BASE + 0xB
+/** An error occured while trying to read from the UART channel. */
+#define ERR_UART_READ					ERR_UART_BASE + 0xC
+
+/** All motor controller errors start at this value. */
+#define ERR_MOTOR_BASE					0x6000
 
 /**
 * @brief Combines error code and error message for lookup
@@ -108,7 +117,9 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_UART_SET_OFLAG, "Failed to set the UART output flags." },
 	{ ERR_UART_SET_CFLAG, "Failed to set the UART control flags." },
 	{ ERR_UART_SET_READ_TIMEOUT, "Failed to set the UART read timetout." },
-	{ ERR_UART_ALREADY_OPEN, "The UART channel is already open." }
+	{ ERR_UART_ALREADY_OPEN, "The UART channel is already open." },
+	{ ERR_UART_POLL, "The poll() operation failed." },
+	{ ERR_UART_READ, "An error occured while trying to read from the UART channel." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])

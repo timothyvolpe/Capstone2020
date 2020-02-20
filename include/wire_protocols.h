@@ -21,6 +21,11 @@
 * @date 2/27/2020
 */
 
+/** The number of MS to wait between write calls when attempting to write a block of data*/
+#define UART_WRITE_WAIT_MS 2
+/** The number of consecutive write attempts to make before failing out. */
+#define UART_WRITE_ATTEMPS 10 
+
 /**
 * @brief Handles an I2C bus.
 * @details This class can handle a single I2C bus with multiple devices connected to it.
@@ -71,8 +76,14 @@ private:
 
 	int m_hChannelHandle;
 	
+	int m_channelError;
+	
 	std::thread m_uartThread;
 	std::atomic<bool> m_threadRunning;
+	std::atomic<unsigned long> m_threadHeartbeat;
+	unsigned long m_lastThreadHeartbeat;
+	
+	std::mutex m_flushLock;
 
 	std::mutex m_writeMutex;
 	WriteQueue m_writeBuffer;
