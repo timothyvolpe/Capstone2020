@@ -71,6 +71,7 @@ void CUARTChannel::uartThreadMain()
 	
 	fileDesc.fd = m_hChannelHandle;
 	fileDesc.events = POLLIN | POLLOUT | POLLERR;
+	fileDesc.revents = 0;
 	
 	bytesAtPort = false;
 	writeAvail = false;
@@ -93,17 +94,13 @@ void CUARTChannel::uartThreadMain()
 			}
 			if( events > 0 )
 			{
-				DebugMessage( "message\n" );
-				
 				// Read some bytes
 				if( fileDesc.revents & POLLIN ) {
 					bytesAtPort = true;
-					std::cout << "READ\n";
 				}
 				// Write some bytes
 				if( fileDesc.revents & POLLOUT ) {
 					writeAvail = true;
-					std::cout << "WRITE\n";
 				}
 				// Error
 				if( fileDesc.revents & POLLERR ) {
@@ -126,9 +123,11 @@ void CUARTChannel::uartThreadMain()
 					m_threadRunning = false;
 					break;
 				}
+
 				if( byteCount <= 0 )
 					bytesAtPort = false;
-				else {
+				else
+				{
 					std::vector<unsigned char> buffer;
 					ssize_t actualBytesRead;
 					buffer.resize( byteCount );
@@ -145,14 +144,14 @@ void CUARTChannel::uartThreadMain()
 						for( auto it = buffer.begin(); it != buffer.end(); it++ )
 							m_readBuffer.push( (*it) );
 					}
+					if( byteCount - actualBytesRead <= 0 )
+						bytesAtPort = false;
 				}
 				
 				lock.unlock();
 			}
 			if( writeAvail && m_writeBuffer.size() > 0 )
 			{
-				DebugMessage( "Writing...\n" );
-				
 				// Write one item
 				std::vector<unsigned char> buffer = m_writeBuffer.front();
 				size_t bufferSize = buffer.size();
@@ -190,10 +189,10 @@ void CUARTChannel::uartThreadMain()
 		}
 	}
 	catch(const std::exception &e) {
-		Terminal()->printImportant( "UART thread encountered an exception and had to stop: %s", e.what() );
+		Terminal()->printImportant( "UART thread encountered an exception and had to stop: %s\n", e.what() );
 	}
 	catch(...) {
-		Terminal()->printImportant( "UART thread encountered an unknown exception and had to stop." );
+		Terminal()->printImportant( "UART thread encountered an unknown exception and had to stop.\n" );
 	}
 	
 	DebugMessage( "UART THREAD EXIT\n" );
@@ -292,7 +291,7 @@ std::vector<unsigned char> CUARTChannel::read( size_t count )
 	readBufferCopy = m_readBuffer;
 	lock.unlock();
 
-	if( count > readBufferCopy.size() )
+	if( count > readBufferCopy.size() || count == 0 )
 		count = readBufferCopy.size();
 	buffer.reserve( count );
 	for( unsigned int i = 0; i < count; i++ ) {
@@ -300,6 +299,10 @@ std::vector<unsigned char> CUARTChannel::read( size_t count )
 		readBufferCopy.pop();
 	}
 	return buffer;
+}
+
+bool CUARTChannel::dataAvailable() {
+	return !m_readBuffer.empty();
 }
 
 #ifdef __linux__

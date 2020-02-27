@@ -23,6 +23,8 @@ CVehicle::CVehicle() {
 
 	m_pMotorControllerLarge = 0;
 	m_pMotorControllerSmall = 0;
+	
+	m_lastMotorUpdate = std::chrono::steady_clock::now(); 
 }
 CVehicle::~CVehicle()
 {
@@ -59,7 +61,7 @@ int CVehicle::initialize()
 	Terminal()->printImportant( "  Setting up motor UART..." );
 	m_pMotorControllerChannel = new CUARTChannel();
 #ifdef __linux__
-	errCode = m_pMotorControllerChannel->open( "/dev/serial1", true, false, false, false );
+	errCode = m_pMotorControllerChannel->open( "/dev/serial0", true, false, false, false );
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
 		return errCode;
@@ -175,11 +177,31 @@ int CVehicle::start()
 			}
 			m_messageQueue.pop();
 		}
+		this->update();
 		Terminal()->update();
 	}
 
 	m_isRunning = false;
 
+	return ERR_OK;
+}
+
+int CVehicle::update()
+{
+	std::chrono::steady_clock::time_point curtime = std::chrono::steady_clock::now();
+	int errCode;
+	
+	// Update motor if necessary
+	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1/MOTOR_UPDATE_FREQUENCY)*1000.0) )
+	{
+		std::string version;
+		if( (errCode = m_pMotorControllerLarge->getControllerInfo( version )) != ERR_OK ) {
+			Terminal()->print( "Failed to communicate with motor controller: %s\n", GetErrorString(errCode) );
+		}
+		Terminal()->print( "Resp: %s\n", version.c_str() );
+		m_lastMotorUpdate = curtime;
+	}
+	
 	return ERR_OK;
 }
 

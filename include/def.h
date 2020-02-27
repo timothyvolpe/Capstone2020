@@ -78,6 +78,10 @@
 #define ERR_UART_POLL					ERR_UART_BASE + 0xB
 /** An error occured while trying to read from the UART channel. */
 #define ERR_UART_READ					ERR_UART_BASE + 0xC
+/** The device connected to the UART did not respond. */
+#define ERR_UART_NO_RESPONSE			ERR_UART_BASE + 0xD
+/** Failed to write to UART. */
+#define ERR_UART_WRITE					ERR_UART_BASE + 0xE
 
 /** All motor controller errors start at this value. */
 #define ERR_MOTOR_BASE					0x6000
@@ -119,7 +123,9 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_UART_SET_READ_TIMEOUT, "Failed to set the UART read timetout." },
 	{ ERR_UART_ALREADY_OPEN, "The UART channel is already open." },
 	{ ERR_UART_POLL, "The poll() operation failed." },
-	{ ERR_UART_READ, "An error occured while trying to read from the UART channel." }
+	{ ERR_UART_READ, "An error occured while trying to read from the UART channel." },
+	{ ERR_UART_NO_RESPONSE, "The device connected to the UART did not respond." },
+	{ ERR_UART_WRITE, "Failed to write to UART." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])

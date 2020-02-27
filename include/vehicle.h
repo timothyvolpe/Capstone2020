@@ -11,7 +11,6 @@
 *
 * @date 1/29/2020
 */
-
 #define ROBOCLAW_60A_ADDRESS 0x80
 #define ROBOCLAW_30A_ADDRESS 0x80
 
@@ -59,6 +58,15 @@ private:
 
 	CMotorController *m_pMotorControllerLarge;
 	CMotorController *m_pMotorControllerSmall;
+	
+	std::chrono::steady_clock::time_point m_lastMotorUpdate;
+	
+	/**
+	* @brief Schedules and executes updates for all the children objects.
+	* @returns Returns #ERR_OK, or an appropriate error code if a failure occured.
+	*/
+	int update();
+	
 public:
 	/**
 	* @brief Returns instance of vehicle singleton.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <string>
 
 /**
 * @file motor.h
@@ -14,6 +15,21 @@
 #define ROBOCLAW_ADDRESS_MIN 0x80
 /** The maximum valid address. There are 8 possible addresses. */
 #define ROBOCLAW_ADDRESS_MAX 0x87
+
+/** How often to update the motor controllers, in Hz */
+#define MOTOR_UPDATE_FREQUENCY 1
+
+enum RoboClawCommand : unsigned char
+{
+	MOTOR1_FORWARD		= 0,
+	MOTOR1_REVERSE		= 1,
+	MOTOR1_DRIVE		= 6,
+	MOTOR2_FORWARD		= 4,
+	MOTOR2_REVERSE		= 5,
+	MOTOR2_DRIVE		= 7,
+	
+	READ_FIRMWARE		= 21
+};
 
 class CUARTChannel;
 
@@ -62,12 +78,28 @@ private:
 	
 	char m_lastForwardSpeedSet;
 	char m_lastReverseSpeedSet;
+	
+	/**
+	* @brief Converts packet to serial binary data.
+	* @details Generates CRC and converts packet to binary buffer for sending over UART.
+	* @param[in]	packet	The packet to serialize. Sets the CRC value.
+	* @return Buffer containing packet binary data.
+	*/
+	std::vector<unsigned char> serializePacket( RoboClawPacket &packet );
 public:
 	CMotorController( CUARTChannel *pUART, unsigned char address );
 	~CMotorController();
 
 	int init();
 	void shutdown();
+	
+	/**
+	* @brief Gets the motor controller information.
+	* @details Retrieves the firmware version, can be used to check validity of communication.
+	* @param[out]	versionStr	A string containing version info from the device
+	* @returns Returns #ERR_OK if successfully read firmware version, or an appropriate error code if a failure occured.
+	*/
+	int getControllerInfo( std::string &versionStr );
 	
 	/**
 	* @brief Sets the selected channel to a forward speed

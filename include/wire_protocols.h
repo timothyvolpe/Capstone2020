@@ -141,10 +141,16 @@ public:
 	* @details This will read count number of bytes from the read buffer and return them. If there are not count
 	*	bytes in the buffer, the entire contents of the read buffer will be returned. The read buffer is filled continuously
 	*	as data is read from the port. 
-	* @param[in]	count	The maximum number of bytes to be read.
+	* @param[in]	count	The maximum number of bytes to be read. Pass 0 to read all bytes.
 	* @returns A buffer containing up to count number of bytes, however an empty buffer may be returned if no bytes were available.
 	*/
 	std::vector<unsigned char> read( size_t count );
+	
+	/**
+	* @brief Checks if there is data available in the read buffer.
+	* @returns True if there is data, false if the buffer is empty.
+	*/
+	bool dataAvailable();
 
 #ifdef __linux__
 	/**
