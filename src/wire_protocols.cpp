@@ -150,41 +150,52 @@ void CUARTChannel::uartThreadMain()
 				
 				lock.unlock();
 			}
-			if( writeAvail && m_writeBuffer.size() > 0 )
+			if( writeAvail )
 			{
-				// Write one item
-				std::vector<unsigned char> buffer = m_writeBuffer.front();
-				size_t bufferSize = buffer.size();
-				ssize_t bytesWritten = 0;
-				int attempts = 0;
-				m_writeBuffer.pop();
+				std::vector<unsigned char> buffer; 
 				
-				// Try to write all the bytes
-				std::unique_lock<std::mutex> lock( m_flushLock );
-				do
+				// Retrieve one entry from the buffer
+				std::unique_lock<std::mutex> lock2( m_writeMutex );
+				if( m_writeBuffer.size() > 0 ) {
+					buffer = m_writeBuffer.front();
+					m_writeBuffer.pop();
+				}
+				lock2.unlock();
+				
+				if( !buffer.empty() )
 				{
-					ssize_t curBytesWritten;
-					curBytesWritten = ::write( m_hChannelHandle, &buffer[0], buffer.size() );
-					if( curBytesWritten <= 0 )
+					size_t bufferSize = buffer.size();
+					ssize_t bytesWritten = 0;
+					int attempts = 0;
+					
+					// Try to write all the bytes
+					std::unique_lock<std::mutex> lock( m_flushLock );
+					do
 					{
-						attempts++;
-						if( attempts >= UART_WRITE_ATTEMPS )
-							break;
-						if( errno != EINTR | errno != EAGAIN ) {
-							m_channelError = ERR_UART_READ;
-							m_threadRunning = false;
-							break;
+						ssize_t curBytesWritten;
+						curBytesWritten = ::write( m_hChannelHandle, &buffer[0], buffer.size() );
+						if( curBytesWritten <= 0 )
+						{	
+							attempts++;
+							if( attempts >= UART_WRITE_ATTEMPS )
+								break;
+							if( errno != EINTR | errno != EAGAIN ) {
+								m_channelError = ERR_UART_READ;
+								m_threadRunning = false;
+								break;
+							}
 						}
-					}
-					else {
-						bytesWritten += curBytesWritten;
-						if( bytesWritten < bufferSize )
-							std::this_thread::sleep_for( std::chrono::milliseconds(UART_WRITE_WAIT_MS) ); 
-					}
-				} while( bytesWritten < bufferSize );
-				lock.unlock();
-				
-				writeAvail = false;
+						else {
+							
+							bytesWritten += curBytesWritten;
+							if( bytesWritten < bufferSize )
+								std::this_thread::sleep_for( std::chrono::milliseconds(UART_WRITE_WAIT_MS) ); 
+						}
+					} while( bytesWritten < bufferSize );
+					lock.unlock();
+					
+					writeAvail = false;
+				}
 			}
 		}
 	}
@@ -308,8 +319,13 @@ bool CUARTChannel::dataAvailable() {
 #ifdef __linux__
 int CUARTChannel::flush()
 {
+	std::unique_lock<std::mutex> lockWrite( m_writeMutex );
 	m_writeBuffer = WriteQueue();
+	lockWrite.unlock();
+	std::unique_lock<std::mutex> lockRead( m_readMutex );
 	m_readBuffer = std::queue<unsigned char>();
+	lockRead.unlock();
+	
 
 	std::lock_guard<std::mutex> lock( m_flushLock );
 	

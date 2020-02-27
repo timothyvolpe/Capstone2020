@@ -196,9 +196,10 @@ int CVehicle::update()
 	{
 		std::string version;
 		if( (errCode = m_pMotorControllerLarge->getControllerInfo( version )) != ERR_OK ) {
-			Terminal()->print( "Failed to communicate with motor controller: %s\n", GetErrorString(errCode) );
+			Terminal()->print( "Failed to communicate with motor controller: %s\n", GetErrorString(errCode) ); 
 		}
 		Terminal()->print( "Resp: %s\n", version.c_str() );
+		
 		m_lastMotorUpdate = curtime;
 	}
 	
@@ -244,7 +245,7 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 	std::string commandName = tokens[0];
 
 	// Evaluate commands
-	if( commandName.compare( "quit" ) == 0 || commandName.compare( "exit" ) == 0 ) {
+	if( commandName.compare( "quit" ) == 0 || commandName.compare( "exit" ) == 0 || commandName.compare( "stop" ) == 0 ) {
 		message_t quitMsg( MSGID_QUIT, true, 0 );
 		this->postMessage( std::make_unique<message_t>( quitMsg ) );
 		return;
