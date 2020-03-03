@@ -189,6 +189,9 @@ int CVehicle::update()
 	std::chrono::steady_clock::time_point curtime = std::chrono::steady_clock::now();
 	int errCode;
 	uint16_t status;
+	float temp1, temp2;
+	uint16_t config;
+	float voltage;
 	
 	// Update motor if necessary
 	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1/MOTOR_UPDATE_FREQUENCY)*1000.0) )
@@ -205,6 +208,26 @@ int CVehicle::update()
 		}
 		else
 			Terminal()->print( "Status: %04X\n", status );
+			
+		if( (errCode = m_pMotorControllerLarge->getTemperature( &temp1, &temp2 )) != ERR_OK ) {
+			Terminal()->print( "Failed to get motor controller temp: %s\n", GetErrorString( errCode ) );
+		}
+		else {
+			Terminal()->print( "Temperature 1: %f\n", temp1 ); 
+			Terminal()->print( "Temperature 2: %f\n", temp2 ); 
+		}
+
+		if( (errCode = m_pMotorControllerLarge->getConfigSettings( &config )) != ERR_OK ) {
+			Terminal()->print( "Failed to get motor controller config: %s\n", GetErrorString( errCode ) );
+		}
+		else
+			Terminal()->print( "Standard Config : %04X\n", config ); 
+			
+		if( (errCode = m_pMotorControllerLarge->getMainBatteryVoltage( &voltage )) != ERR_OK ) {
+			Terminal()->print( "Failed to get main battery voltage: %s\n", GetErrorString( errCode ) );
+		}
+		else
+			Terminal()->print( "Battery Voltage : %f V\n", voltage ); 
 		
 		m_lastMotorUpdate = curtime;
 	}

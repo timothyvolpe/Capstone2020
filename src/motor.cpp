@@ -3,11 +3,13 @@
 #include <vector>
 #include <cstring>
 #include <algorithm>
+#include <endian.h>
 #include "def.h"
 #include "motor.h"
 #include "wire_protocols.h"
 
-#include <iostream>
+#include "terminal.h"
+#include "vehicle.h"
 
 uint16_t roboclaw_crc16( const std::vector<unsigned char> &buffer )
 {
@@ -178,15 +180,14 @@ int CMotorController::getControllerInfo( std::string &versionStr )
 	std::vector<unsigned char> response;
 	int errCode;
 	
-	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_FIRMWARE, 48, response ) ) != ERR_OK )
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_FIRMWARE, 50, response ) ) != ERR_OK )
 		return errCode;
 	if( response.empty() )
 		return ERR_UART_NO_RESPONSE;
 		
 	// Verify response
-	if( !this->verifyResponse( RoboClawCommand::READ_FIRMWARE, response ) ) {
-		std::cout << "Failed CRC" << std::endl;
-	}
+	if( !this->verifyResponse( RoboClawCommand::READ_FIRMWARE, response ) )
+		return ERR_UART_INVALID_RESPONSE;
 		
 	versionStr = std::string( response.begin(), response.end() );
 	// Remove line ending added by device
@@ -197,17 +198,125 @@ int CMotorController::getControllerInfo( std::string &versionStr )
 
 int CMotorController::getControllerStatus( uint16_t *pStatus )
 {
+	assert( pStatus );
+	
 	std::vector<unsigned char> response;
 	int errCode;
 	
-	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_STATUS, 3, response ) ) != ERR_OK )
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_STATUS, 6, response ) ) != ERR_OK )
 		return errCode;
 	if( response.empty() )
 		return ERR_UART_NO_RESPONSE;
-	if( response.size() < 2 )
+
+	// Verify response
+	if( !this->verifyResponse( RoboClawCommand::READ_STATUS, response ) )
 		return ERR_UART_INVALID_RESPONSE;
 		
-	(*pStatus) = (uint16_t)(response[1]) << 8 + response[0];
+	// Combine hi and low bytes and account for endianness
+	(*pStatus) = be16toh( response[1] + (response[0] << 8) );
+
+	return ERR_OK;
+}
+
+int CMotorController::getTemperature( float *pTemp1, float *pTemp2 )
+{
+	assert( pTemp1 );
+	
+	std::vector<unsigned char> response;
+	int errCode;
+	uint16_t temp1, temp2;
+	
+	// Temperature 1
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_TEMPERATURE, 4, response ) ) != ERR_OK )
+		return errCode;
+	if( response.empty() )
+		return ERR_UART_NO_RESPONSE;
+	// Verify response
+	if( !this->verifyResponse( RoboClawCommand::READ_TEMPERATURE, response ) )
+		return ERR_UART_INVALID_RESPONSE;
+		
+	// Combine hi and low bytes and account for endianness
+	temp1 = be16toh( response[1] + response[0] << 8 );
+		
+	(*pTemp1) = temp1 * 0.1f;
+	
+	// Temperature 2
+	if( pTemp2 )
+	{
+		// Temperature 2
+		if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_TEMPERATURE2, 4, response ) ) != ERR_OK )
+			return errCode;
+		if( response.empty() )
+			return ERR_UART_NO_RESPONSE;
+		// Verify response
+		if( !this->verifyResponse( RoboClawCommand::READ_TEMPERATURE2, response ) )
+			return ERR_UART_INVALID_RESPONSE;
+			
+		temp2 = be16toh( response[1] + response[0] << 8 );
+		
+		(*pTemp2) = temp2 * 0.1f;
+	}
+	
+	return ERR_OK;
+}
+
+int CMotorController::getMainBatteryVoltage( float *pVoltage )
+{
+	assert( pVoltage );
+	
+	std::vector<unsigned char> response;
+	int errCode;
+	uint16_t voltage;
+	
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_VOLTAGE_MAIN, 4, response ) ) != ERR_OK )
+		return errCode;
+	if( response.empty() )
+		return ERR_UART_NO_RESPONSE;
+	// Verify response
+	if( !this->verifyResponse( RoboClawCommand::READ_VOLTAGE_MAIN, response ) )
+		return ERR_UART_INVALID_RESPONSE;
+		
+	// Combine hi and low bytes and account for endianness
+	voltage = be16toh( response[1] + response[0] << 8 );
+	(*pVoltage) = voltage * 0.1f;
+	
+	return ERR_OK;
+}
+
+// 0x00FB 	= 0b00000000 11111011
+// 0x00FC	= 0b00000000 11111100
+// 0x00FD	= 0b00000000 11111101
+
+// 0x0000	= 0b00000000 00000000	Address 0x80
+// 0x0100	= 0b00000001 00000000 	Address 0x81
+// 0x0200	= 0b00000010 00000000	Address 0x82
+
+// 0x00E0	= 0b00000000 11100000	Baud 460800
+
+// 11111101
+// --------
+// 111XXXXX		= 0xE0, Baud 460800
+// XXX1XXXX		= 0x10,	Battery Mode 4 Cell
+// XXXX1XXX		= 0x08, MCU
+// XXXXX1XX		= 0x04
+
+int CMotorController::getConfigSettings( uint16_t *pConfigSettings )
+{
+	assert( pConfigSettings );
+	
+	std::vector<unsigned char> response;
+	int errCode;
+	
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_STANDARD_CONFIG, 4, response ) ) != ERR_OK )
+		return errCode;
+	if( response.empty() )
+		return ERR_UART_NO_RESPONSE;
+	// Verify response
+	if( !this->verifyResponse( RoboClawCommand::READ_STANDARD_CONFIG, response ) )
+		return ERR_UART_INVALID_RESPONSE;
+		
+	// Combine hi and low bytes and account for endianness
+	(*pConfigSettings) = be16toh( response[1] + response[0] << 8 );
 	
 	return ERR_OK;
 }

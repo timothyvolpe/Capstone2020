@@ -22,7 +22,7 @@
 enum RoboClawCommand : unsigned char
 {
 	MOTOR1_FORWARD			= 0,
-	MOTOR1_REVERSE			= 1,
+	MOTOR1_REVERSE			= 1, 
 	MOTOR1_DRIVE			= 6,
 	MOTOR2_FORWARD			= 4,
 	MOTOR2_REVERSE			= 5,
@@ -43,10 +43,53 @@ enum RoboClawCommand : unsigned char
 	
 	READ_STATUS				= 90,
 	
+	READ_STANDARD_CONFIG	= 99,
+	
 	SET_VOLTAGE_LOGICMIN	= 26,
 	SET_VOLTAGE_LOGICMAX	= 27,
 	SET_VOLTAGE_MAIN		= 57,
 	SET_VOLTAGE_LOGIC		= 58
+};
+
+enum RoboClawSettings : uint16_t
+{
+	RC_MODE				= 0x0000,
+	ANALOG_MODE			= 0x0001,
+	SIMPLE_SERIAL_MODE	= 0x0002,
+	PACKET_SERIAL_MODE	= 0x0003,
+	BATTERY_MODE_OFF	= 0x0000,
+	BATTERY_MODE_AUTO	= 0x0004,
+	BATTERY_MODE_2CELL	= 0x0008,
+	BATTERY_MODE_3CELL	= 0x000C,
+	BATTERY_MODE_4CELL	= 0x0010,
+	BATTERY_MODE_5CELL	= 0x0014,
+	BATTERY_MODE_6CELL	= 0x0018,
+	BATTERY_MODE_7CELL	= 0x001C,
+	MIXING				= 0x0020,
+	EXPONENTIAL			= 0x0040,
+	MCU					= 0x0080,
+	BAUDRATE_2400		= 0x0000,
+	BAUDRATE_9600		= 0x0020,
+	BAUDRATE_19200		= 0x0040,
+	BAUDRATE_38400		= 0x0060,
+	BAUDRATE_57600		= 0x0080,
+	BAUDRATE_115200		= 0x00A0,
+	BAUDRATE_230400		= 0x00C0,
+	BAUDRATE_460800		= 0x00E0,
+	FLIPSWITCH			= 0x0100,
+	PACKET_ADDRESS_80	= 0x0000,
+	PACKET_ADDRESS_81	= 0x0100,
+	PACKET_ADDRESS_82	= 0x0200,
+	PACKET_ADDRESS_83	= 0x0300,
+	PACKET_ADDRESS_84	= 0x0400,
+	PACKET_ADDRESS_85	= 0x0500,
+	PACKET_ADDRESS_86	= 0x0600,
+	PACKET_ADDRESS_87	= 0x0700,
+	SLAVE_MODE			= 0x0800,
+	RELAY_MODE			= 0x1000,
+	SWAP_ENCODERS		= 0x2000,
+	SWAP_BUTTONS		= 0x4000,
+	MULTI_UNIT_MODE		= 0x8000
 };
 
 class CUARTChannel;
@@ -199,6 +242,31 @@ public:
 	* @returns Returns #ERR_OK if successfully read controller status, or an appropriate error code if a failure occured.
 	*/
 	int getControllerStatus( uint16_t *pStatus );
+	
+	/**
+	* @brief Reads the two temperatures available from the controller.
+	* @details Temperature 1 is always available, while temperature 2 is only on supported units. Only the first
+	* argument is required
+	* @param[out]	pTemp1	The value of board temperature 1, in degrees C.
+	* @param[out]	pTemp2	The value of board temperature 2, in degrees C. Can be NULL.
+	* @returns Returns #ERR_OK if successfully read controller temperature, or an appropriate error code if a failure occured.
+	*/
+	int getTemperature( float *pTemp1, float *pTemp2 );
+	
+	/**
+	* @brief Reads the main battery voltage, in volts.
+	* @param[out]	pVoltage	The voltage of the main battery
+	* @returns Returns #ERR_OK if successfully read main battery voltage, or an appropriate error code if a failure occured.
+	*/
+	int getMainBatteryVoltage( float *pVoltage );
+	
+	/**
+	* @brief Read config bits for standard settings.
+	* @details See the RoboClaw user main for description of the response.
+	* @param[out]	pConfigSettings		A two-byte integer representing the current settings.
+	* @returns Returns #ERR_OK if successfully read controller settings, or an appropriate error code if a failure occured.
+	*/
+	int getConfigSettings( uint16_t *pConfigSettings );
 	
 	/**
 	* @brief Sets the selected channel to a forward speed
