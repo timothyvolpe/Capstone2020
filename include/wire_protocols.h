@@ -140,7 +140,7 @@ public:
 	* @brief Reads a certain number of bytes from the read buffer.
 	* @details This will read count number of bytes from the read buffer and return them. If there are not count
 	*	bytes in the buffer, the entire contents of the read buffer will be returned. The read buffer is filled continuously
-	*	as data is read from the port. 
+	*	as data is read from the port. This will pop the bytes from the buffer, so the cannot be read twice.
 	* @param[in]	count	The maximum number of bytes to be read. Pass 0 to read all bytes.
 	* @returns A buffer containing up to count number of bytes, however an empty buffer may be returned if no bytes were available.
 	*/

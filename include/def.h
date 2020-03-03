@@ -82,6 +82,8 @@
 #define ERR_UART_NO_RESPONSE			ERR_UART_BASE + 0xD
 /** Failed to write to UART. */
 #define ERR_UART_WRITE					ERR_UART_BASE + 0xE
+/** The response from the UART device was invalid. */
+#define ERR_UART_INVALID_RESPONSE		ERR_UART_BASE + 0xF
 
 /** All motor controller errors start at this value. */
 #define ERR_MOTOR_BASE					0x6000
@@ -125,7 +127,8 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_UART_POLL, "The poll() operation failed." },
 	{ ERR_UART_READ, "An error occured while trying to read from the UART channel." },
 	{ ERR_UART_NO_RESPONSE, "The device connected to the UART did not respond." },
-	{ ERR_UART_WRITE, "Failed to write to UART." }
+	{ ERR_UART_WRITE, "Failed to write to UART." },
+	{ ERR_UART_INVALID_RESPONSE, "The response from the UART device was invalid." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])

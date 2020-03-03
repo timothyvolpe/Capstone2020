@@ -67,9 +67,7 @@ int CVehicle::initialize()
 		return errCode;
 	}
 	errCode = m_pMotorControllerChannel->setBaudRate( B460800 );
-	errCode = m_pMotorControllerChannel->setiFlag( m_pMotorControllerChannel->getiFlag()
-		& ~(INPCK | IXON | IXOFF | IXANY)
-		);	// No parity, no XON/XOFF
+	errCode = m_pMotorControllerChannel->setiFlag( IGNBRK );
 	errCode = m_pMotorControllerChannel->setoFlag( 0 );
 	errCode = m_pMotorControllerChannel->setReadTimeout( 50 );
 	if( errCode != ERR_OK ) {
@@ -190,15 +188,23 @@ int CVehicle::update()
 {
 	std::chrono::steady_clock::time_point curtime = std::chrono::steady_clock::now();
 	int errCode;
+	uint16_t status;
 	
 	// Update motor if necessary
 	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1/MOTOR_UPDATE_FREQUENCY)*1000.0) )
 	{
 		std::string version;
 		if( (errCode = m_pMotorControllerLarge->getControllerInfo( version )) != ERR_OK ) {
-			Terminal()->print( "Failed to communicate with motor controller: %s\n", GetErrorString(errCode) ); 
+			Terminal()->print( "Failed to get controller info: %s\n", GetErrorString( errCode ) ); 
 		}
-		Terminal()->print( "Resp: %s\n", version.c_str() );
+		else
+			Terminal()->print( "Resp: %s\n", version.c_str() );
+		
+		if( (errCode = m_pMotorControllerLarge->getControllerStatus( &status )) != ERR_OK ) {
+			Terminal()->print( "Failed to get motor controller status: %s\n", GetErrorString( errCode ) );
+		}
+		else
+			Terminal()->print( "Status: %04X\n", status );
 		
 		m_lastMotorUpdate = curtime;
 	}

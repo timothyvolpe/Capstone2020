@@ -123,7 +123,7 @@ void CUARTChannel::uartThreadMain()
 					m_threadRunning = false;
 					break;
 				}
-
+			
 				if( byteCount <= 0 )
 					bytesAtPort = false;
 				else
@@ -228,7 +228,7 @@ int CUARTChannel::open( std::string channelPath, bool enableReceiver, bool twoSt
 	}
 	
 	// Get current options
-	::tcgetattr( m_hChannelHandle, &m_uartOptions );
+	//::tcgetattr( m_hChannelHandle, &m_uartOptions );
 	m_uartOptions.c_cflag = CS8 | CLOCAL;	// message length 8 bits
 	if( enableReceiver )
 		m_uartOptions.c_cflag |= CREAD;	
@@ -295,20 +295,18 @@ bool CUARTChannel::write( std::vector<unsigned char> buffer )
 }
 std::vector<unsigned char> CUARTChannel::read( size_t count )
 {
-	std::queue<unsigned char> readBufferCopy;
 	std::vector<unsigned char> buffer;
 
-	std::unique_lock<std::mutex> lock( m_readMutex );
-	readBufferCopy = m_readBuffer;
-	lock.unlock();
-
-	if( count > readBufferCopy.size() || count == 0 )
-		count = readBufferCopy.size();
+	std::lock_guard<std::mutex> lock( m_readMutex );
+	
+	if( count > m_readBuffer.size() || count == 0 )
+		count = m_readBuffer.size();
 	buffer.reserve( count );
 	for( unsigned int i = 0; i < count; i++ ) {
-		buffer.push_back( readBufferCopy.front() );
-		readBufferCopy.pop();
+		buffer.push_back( m_readBuffer.front() );
+		m_readBuffer.pop();
 	}
+	
 	return buffer;
 }
 
