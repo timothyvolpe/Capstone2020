@@ -19,6 +19,11 @@
 /** How often to update the motor controllers, in Hz */
 #define MOTOR_UPDATE_FREQUENCY 1
 
+/** How long to wait for data to be returned from the UART before timing out */
+#define MOTOR_UART_WAIT_MS 10
+/** The number of times to try contacting the controller again after no response */
+#define MOTOR_UART_TRIES 3
+
 enum RoboClawCommand : unsigned char
 {
 	MOTOR1_FORWARD			= 0,
@@ -30,13 +35,16 @@ enum RoboClawCommand : unsigned char
 	
 	READ_FIRMWARE			= 21,
 	READ_VOLTAGE_MAIN		= 24,
-	READ_VOLTAGE_LOGICB		= 25,
+	READ_VOLTAGE_LOGIC		= 25,
 	
-	READ_MOTOR_PWM			= 48,
-	READ_MOTOR_CURRENT		= 49,
+	READ_MOTOR_PWMS			= 48,
+	READ_MOTOR_CURRENTS		= 49,
 	
-	READ_SETTINGS_MAIN_VOLTAGE	= 59,
-	READ_SETTINGS_LOGIC_VOLTAGE	= 60,
+	SET_MAIN_VOLTAGES		= 57,
+	SET_LOGIC_VOLTAGES		= 58,
+	
+	READ_MAIN_VOLTAGES		= 59,
+	READ_LOGIC_VOLTAGES		= 60,
 	
 	READ_TEMPERATURE		= 82,
 	READ_TEMPERATURE2		= 83,
@@ -44,11 +52,6 @@ enum RoboClawCommand : unsigned char
 	READ_STATUS				= 90,
 	
 	READ_STANDARD_CONFIG	= 99,
-	
-	SET_VOLTAGE_LOGICMIN	= 26,
-	SET_VOLTAGE_LOGICMAX	= 27,
-	SET_VOLTAGE_MAIN		= 57,
-	SET_VOLTAGE_LOGIC		= 58
 };
 
 enum RoboClawSettings : uint16_t
@@ -163,7 +166,7 @@ private:
 	* @brief Sends a blocking command to the controller with no value.
 	* @param[in]	command			The command value.
 	* @param[in]	responseLength	The expected response length, it will read up to this many bytes, but possibly less.
-	* @param[out]	response		The response if the command, if there was any.
+	* @param[out]	response		The response of the command, if there was any.
 	* @returns Returns #ERR_OK if success, error code if otherwise.
 	* @warning This flushes the UART channel.
 	*/
@@ -174,7 +177,7 @@ private:
 	* @param[in]	command			The command value.
 	* @param[in]	value			The 8-bit command argument.
 	* @param[in]	responseLength	The expected response length, it will read up to this many bytes, but possibly less.
-	* @param[out]	response		The response if the command, if there was any.
+	* @param[out]	response		The response of the command, if there was any.
 	* @returns Returns #ERR_OK if success, error code if otherwise.
 	* @warning This flushes the UART channel.
 	*/
@@ -185,18 +188,30 @@ private:
 	* @param[in]	command			The command value.
 	* @param[in]	value			The 16-bit command argument.
 	* * @param[in]	responseLength	The expected response length, it will read up to this many bytes, but possibly less.
-	* @param[out]	response		The response if the command, if there was any.
+	* @param[out]	response		The response of the command, if there was any.
 	* @returns Returns #ERR_OK if success, error code if otherwise.
 	* @warning This flushes the UART channel.
 	*/
 	int sendCommand16Blocking( unsigned char command, uint16_t value, size_t responseLength, std::vector<unsigned char> &response );
 	
 	/**
+	* @brief Sends a blocking command to the controller with two 16-bit arguments.
+	* @param[in]	command			The command value.
+	* @param[in]	value1			The 1st 16-bit command argument.
+	* @param[in]	value2			The 2nd 16-bit command argument.
+	* * @param[in]	responseLength	The expected response length, it will read up to this many bytes, but possibly less.
+	* @param[out]	response		The response of the command, if there was any.
+	* @returns Returns #ERR_OK if success, error code if otherwise.
+	* @warning This flushes the UART channel.
+	*/
+	int sendCommand1616Blocking( unsigned char command, uint16_t value1, uint16_t value2, size_t responseLength, std::vector<unsigned char> &response );
+	
+	/**
 	* @brief Sends a blocking command to the controller with 32-bit argument.
 	* @param[in]	command			The command value.
 	* @param[in]	value			The 32-bit command argument.
 	* @param[in]	responseLength	The expected response length, it will read up to this many bytes, but possibly less.
-	* @param[out]	response		The response if the command, if there was any.
+	* @param[out]	response		The response of the command, if there was any.
 	* @returns Returns #ERR_OK if success, error code if otherwise.
 	* @warning This flushes the UART channel.
 	*/
@@ -261,12 +276,72 @@ public:
 	int getMainBatteryVoltage( float *pVoltage );
 	
 	/**
+	* @brief Reads the logic battery voltage, in volts.
+	* @param[out]	pVoltage	The voltage of the logic battery
+	* @returns Returns #ERR_OK if successfully read logic battery voltage, or an appropriate error code if a failure occured.
+	*/
+	int getLogicBatteryVoltage( float *pVoltage );
+	
+	/**
 	* @brief Read config bits for standard settings.
 	* @details See the RoboClaw user main for description of the response.
 	* @param[out]	pConfigSettings		A two-byte integer representing the current settings.
 	* @returns Returns #ERR_OK if successfully read controller settings, or an appropriate error code if a failure occured.
 	*/
 	int getConfigSettings( uint16_t *pConfigSettings );
+	
+	/**
+	* @brief Gets the current of each motor channel, in A.
+	* @details The resolution is 10 mA.
+	* @param[out]	pCurrentM1	The current of motor 1, in A.
+	* @param[out]	pCurrentM2	The current of motor 2, in A.
+	* @returns Returns #ERR_OK if successfully read motor currents, or an appropriate error code if a failure occured.
+	*/
+	int getMotorCurrents( float *pCurrentM1, float *pCurrentM2 );
+	
+	/**
+	* @brief Gets the PWM duty cycle of each motor channel.
+	* @details The values range from 0, representing 0%, to 100, representing 100%.
+	* @param[out]	pDuty1	The PWM duty cycle of motor 1.
+	* @param[out]	pDuty2	The PWM duty cycle of motor 2.
+	* @returns Returns #ERR_OK if successfully read motor duty cycles, or an appropriate error code if a failure occured.
+	*/
+	int getMotorDutyCycles( float *pDuty1, float *pDuty2 );
+	
+	/**
+	* @brief Sets the minimum and maximum main battery voltage levels.
+	* @details If the main voltage level is outside this range, it will cause a shutdown. Accurate to the 10th of a volt.
+	* @param[in]	mainMin		The minimum logic voltage level. 
+	* @param[in]	mainMax		The maximum logic voltage level.
+	* @warning If minimum > maximum, the controller we be constantly in an error state.
+	* @returns Returns #ERR_OK if successfully set main battery voltage level limits, or an appropriate error code if a failure occured.
+	*/
+	int setMainVoltageLevels( float mainMin, float mainMax );
+	/**
+	* @brief Sets the minimum and maximum logic battery voltage levels.
+	* @details If the logic voltage level is outside this range, it will cause a shutdown. Accurate to the 10th of a volt.
+	* @param[in]	logicMin	The minimum logic voltage level. 
+	* @param[in]	logicMax	The maximum logic voltage level.
+	* @warning If minimum > maximum, the controller we be constantly in an error state.
+	* @returns Returns #ERR_OK if successfully set logic battery voltage level limits, or an appropriate error code if a failure occured.
+	*/
+	int setLogicVoltageLevels( float logicMin, float logicMax );
+	
+	/**
+	* @brief Gets the minimum and maximum main battery voltage levels. 
+	* @param[out]	pMainMin	The minimum allowable main voltage level.
+	* @param[out]	pMainMax	The maximum allowable main voltage level.
+	* @returns Returns #ERR_OK if successfully got the main battery voltage level limits, or an appropriate error code if a failure occured.
+	*/
+	int getMainVoltageLevels( float *pMainMin, float *pMainMax );
+	
+	/**
+	* @brief Gets the minimum and maximum logic battery voltage levels. 
+	* @param[out]	pLogicMin	The minimum allowable logic voltage level.
+	* @param[out]	pLogicMax	The maximum allowable logic voltage level.
+	* @returns Returns #ERR_OK if successfully got the logic battery voltage level limits, or an appropriate error code if a failure occured.
+	*/
+	int getLogicVoltageLevels( float *pLogicMin, float *pLogicMax );
 	
 	/**
 	* @brief Sets the selected channel to a forward speed
@@ -277,7 +352,7 @@ public:
 	* @param[in]	speed		The speed to set the channel to, 0-127
 	* @returns Returns #ERR_OK if successfully modified motor channel, or an appropriate error code if a failure occured.
 	*/
-	int forward( RoboClawChannels channelId, char speed );
+	int forward( RoboClawChannels channelId, int8_t speed );
 	
 	/**
 	* @brief Sets the selected channel to a reverse speed
@@ -288,5 +363,5 @@ public:
 	* @param[in]	speed		The speed to set the channel to, 0-127
 	* @returns Returns #ERR_OK if successfully modified motor channel, or an appropriate error code if a failure occured.
 	*/
-	int reverse( RoboClawChannels channelId, char speed );
+	int reverse( RoboClawChannels channelId, int8_t speed );
 };

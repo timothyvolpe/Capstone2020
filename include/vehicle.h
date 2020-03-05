@@ -11,8 +11,21 @@
 *
 * @date 1/29/2020
 */
+
+/** Address of largeer 60A motor controller */
 #define ROBOCLAW_60A_ADDRESS 0x82
+/** Address of smaller 30A motor controller */
 #define ROBOCLAW_30A_ADDRESS 0x80
+
+/** Maximum allowable value of the 12 V batteries. */
+#define ROBOCLAW_BATTERY_MIN 11.5f
+/** Minimum allowable value of the 12 V batteries. */
+#define ROBOCLAW_BATTERY_MAX 15.0f
+
+/** Minimum allowable value of the logic battery. */
+#define ROBOCLAW_LOGIC_MIN 6.0f
+/** Maximum allowable value of the logic battery. */
+#define ROBOCLAW_LOGIC_MAX 15.0f
 
 class CSensorManager;
 class CI2CBus;
@@ -60,6 +73,9 @@ private:
 	CMotorController *m_pMotorControllerSmall;
 	
 	std::chrono::steady_clock::time_point m_lastMotorUpdate;
+	
+	int setupMotors();
+	void showMotorControllerStatus();
 	
 	/**
 	* @brief Schedules and executes updates for all the children objects.

@@ -30,6 +30,22 @@ CVehicle::~CVehicle()
 {
 }
 
+int CVehicle::setupMotors()
+{
+	int errCode;
+	
+	if( (errCode = m_pMotorControllerLarge->setLogicVoltageLevels( ROBOCLAW_LOGIC_MIN, ROBOCLAW_LOGIC_MAX )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to set logic level limits\n" );
+		return errCode;
+	}
+	if( (errCode = m_pMotorControllerLarge->setMainVoltageLevels( ROBOCLAW_BATTERY_MIN, ROBOCLAW_BATTERY_MAX )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to set logic level limits\n" );
+		return errCode;
+	}
+	
+	return ERR_OK;
+}
+
 int CVehicle::initialize()
 {
 	int errCode;
@@ -109,6 +125,11 @@ int CVehicle::initialize()
 		return errCode;
 	}
 	Terminal()->print( "SUCCESS\n" );
+	Terminal()->print( "    Configuring motors... " );
+	errCode = this->setupMotors();
+	if( errCode != ERR_OK )
+		return errCode;
+	Terminal()->print( "SUCCESS\n" );
 	Terminal()->printImportant( "  Motor controller initialization: SUCCESS\n" );
 
 	return ERR_OK;
@@ -184,50 +205,97 @@ int CVehicle::start()
 	return ERR_OK;
 }
 
+void CVehicle::showMotorControllerStatus()
+{
+	int errCode;
+	std::string version;
+	uint16_t motorStatus;
+	float temp1, temp2;
+	uint16_t motorConfig;
+	float mainVoltage;
+	float logicVoltage;
+	float mainMin, mainMax;
+	float logicMin, logicMax;
+	float current1, current2;
+	float duty1, duty2;
+	
+	if( (errCode = m_pMotorControllerLarge->getControllerInfo( version )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get controller info: %s\n", GetErrorString( errCode ) ); 
+	}
+	else
+		Terminal()->print( "Controller Version:\t%s\n", version.c_str() );
+	
+	if( (errCode = m_pMotorControllerLarge->getControllerStatus( &motorStatus )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor controller status: %s\n", GetErrorString( errCode ) );
+	}
+	else
+		Terminal()->print( "Controller Status:\t%04X\n", motorStatus );
+		
+	if( (errCode = m_pMotorControllerLarge->getTemperature( &temp1, &temp2 )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor controller temp: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Temperature 1:\t\t%.2f C\n", temp1 ); 
+		Terminal()->print( "Temperature 2:\t\t%.2f C\n", temp2 ); 
+	}
+
+	if( (errCode = m_pMotorControllerLarge->getConfigSettings( &motorConfig )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor controller config: %s\n", GetErrorString( errCode ) );
+	}
+	else
+		Terminal()->print( "Standard Config:\t%04X\n", motorConfig ); 
+		
+	if( (errCode = m_pMotorControllerLarge->getMainBatteryVoltage( &mainVoltage )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get main battery voltage: %s\n", GetErrorString( errCode ) );
+	}
+	else
+		Terminal()->print( "Battery Voltage:\t%.1f V\n", mainVoltage ); 
+		
+	if( (errCode = m_pMotorControllerLarge->getLogicBatteryVoltage( &logicVoltage )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get logic battery voltage: %s\n", GetErrorString( errCode ) );
+	}
+	else
+		Terminal()->print( "Logic Battery Voltage:\t%.1f V\n", logicVoltage ); 
+	
+	if( (errCode = m_pMotorControllerLarge->getMainVoltageLevels( &mainMin, &mainMax )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get main battery voltage levels: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Main Voltage Limits:\t%.1f V - %.1f V\n", mainMin, mainMax ); 
+	}
+		
+	if( (errCode = m_pMotorControllerLarge->getLogicVoltageLevels( &logicMin, &logicMax )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get logic battery voltage levels: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Logic Voltage Limits:\t%.1f V - %.1f V\n", logicMin, logicMax ); 
+	}
+		
+	if( (errCode = m_pMotorControllerLarge->getMotorCurrents( &current1, &current2 )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor currents: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Motor Current 1:\t%.3f A\n", current1 ); 
+		Terminal()->print( "Motor Current 2:\t%.3f A\n", current2 ); 
+	}
+	
+	if( (errCode = m_pMotorControllerLarge->getMotorDutyCycles( &duty1, &duty2 )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor duty cycles: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Motor Duty Cycle 1:\t%.1f%%\n", duty1 ); 
+		Terminal()->print( "Motor Duty Cycle 2:\t%.1f%%\n", duty2 ); 
+	}
+}
+
 int CVehicle::update()
 {
 	std::chrono::steady_clock::time_point curtime = std::chrono::steady_clock::now();
-	int errCode;
-	uint16_t status;
-	float temp1, temp2;
-	uint16_t config;
-	float voltage;
 	
 	// Update motor if necessary
 	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1/MOTOR_UPDATE_FREQUENCY)*1000.0) )
 	{
-		std::string version;
-		if( (errCode = m_pMotorControllerLarge->getControllerInfo( version )) != ERR_OK ) {
-			Terminal()->print( "Failed to get controller info: %s\n", GetErrorString( errCode ) ); 
-		}
-		else
-			Terminal()->print( "Resp: %s\n", version.c_str() );
-		
-		if( (errCode = m_pMotorControllerLarge->getControllerStatus( &status )) != ERR_OK ) {
-			Terminal()->print( "Failed to get motor controller status: %s\n", GetErrorString( errCode ) );
-		}
-		else
-			Terminal()->print( "Status: %04X\n", status );
-			
-		if( (errCode = m_pMotorControllerLarge->getTemperature( &temp1, &temp2 )) != ERR_OK ) {
-			Terminal()->print( "Failed to get motor controller temp: %s\n", GetErrorString( errCode ) );
-		}
-		else {
-			Terminal()->print( "Temperature 1: %f\n", temp1 ); 
-			Terminal()->print( "Temperature 2: %f\n", temp2 ); 
-		}
-
-		if( (errCode = m_pMotorControllerLarge->getConfigSettings( &config )) != ERR_OK ) {
-			Terminal()->print( "Failed to get motor controller config: %s\n", GetErrorString( errCode ) );
-		}
-		else
-			Terminal()->print( "Standard Config : %04X\n", config ); 
-			
-		if( (errCode = m_pMotorControllerLarge->getMainBatteryVoltage( &voltage )) != ERR_OK ) {
-			Terminal()->print( "Failed to get main battery voltage: %s\n", GetErrorString( errCode ) );
-		}
-		else
-			Terminal()->print( "Battery Voltage : %f V\n", voltage ); 
+		// Do stuff...
 		
 		m_lastMotorUpdate = curtime;
 	}
@@ -239,6 +307,8 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 {
 	assert( pCommandMsg );
 	assert( pCommandMsg->message_id == MSGID_TERMINAL_MSG );
+	
+	int errCode;
 
 	// Cast
 	terminal_msg_t *pMsgData = static_cast<terminal_msg_t*>(pCommandMsg.get());
@@ -279,12 +349,74 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 		this->postMessage( std::make_unique<message_t>( quitMsg ) );
 		return;
 	}
-	if( commandName.compare( "test" ) == 0 ) {
-		Terminal()->printImportant( "Motor Forward!\n" );
-		m_pMotorControllerLarge->forward( RoboClawChannels::CHANNEL1, 64 );
+	else if( commandName.compare( "help" ) == 0 )
+	{
+		Terminal()->print( "\nCommand List:\n" );
+		Terminal()->print( "quit\t\t\t- Exits the program safely.\n" );
+		Terminal()->print( "exit\t\t\t- Exits the program safely.\n" );
+		Terminal()->print( "stop\t\t\t- Exits the program safely.\n" );
+		Terminal()->print( "mocstatus\t\t- Displays the motor controller status info.\n" );
+		Terminal()->print( "forward [speed]\t- Drive both main motors forward. Speed 0-127\n" );
+		Terminal()->print( "reverse [speed]\t- Drive both main motors in reverse. Speed 0-127\n" );
+		Terminal()->print( "forward1 [speed]\t- Drive main motor on channel 1 forward. Speed 0-127\n" );
+		Terminal()->print( "reverse1 [speed]\t- Drive main motor on channel 1 in reverse. Speed 0-127\n" );
+		Terminal()->print( "forward2 [speed]\t- Drive main motor on channel 2 forward. Speed 0-127\n" );
+		Terminal()->print( "reverse2 [speed]\t- Drive main motor on channel 2 in reverse. Speed 0-127\n" );
+		Terminal()->printImportant( "\n" );
+	}
+	else if( commandName.compare( "mocstatus" ) == 0 )
+	{
+		Terminal()->printImportant( "\nMotor Controller Status:\n" );
+		this->showMotorControllerStatus();
+		Terminal()->printImportant( "\n" );
+	}
+	else if( commandName.compare( "forward1" ) == 0 || commandName.compare( "reverse1" ) == 0  || 
+				commandName.compare( "forward2" ) == 0 || commandName.compare( "reverse2" ) == 0 || 
+				commandName.compare( "forward" ) == 0 || commandName.compare( "reverse" ) == 0 )
+	{
+		if( tokens.size() < 2 )
+			Terminal()->printImportant( "Missing speed argument. See 'help'\n" );
+		else
+		{
+			try
+			{
+				int speed = std::stoi( tokens[1] );
+				if( speed < 0 )
+					speed = 0;
+				if( speed > 127 )
+					speed = 127;
+				if( commandName.compare( "forward1" ) == 0 || commandName.compare( "forward" ) == 0 ) {
+					Terminal()->print( "Driving motor 1 forward at %d speed...\n", speed );
+					if( (errCode = this->m_pMotorControllerLarge->forward( RoboClawChannels::CHANNEL1, (int8_t)speed )) != ERR_OK ) {
+						Terminal()->printImportant( "Failed to drive motor 1 forward: %s\n", GetErrorString( errCode ) );
+					}
+				}
+				if( commandName.compare( "reverse1" ) == 0 || commandName.compare( "reverse" ) == 0 ) {
+					Terminal()->print( "Driving motor 1 in reverse at %d speed...\n", speed );
+					if( (errCode = this->m_pMotorControllerLarge->reverse( RoboClawChannels::CHANNEL1, (int8_t)speed )) != ERR_OK ) {
+						Terminal()->printImportant( "Failed to drive motor 1 in reverse: %s\n", GetErrorString( errCode ) );
+					}
+				}
+				if( commandName.compare( "forward2" ) == 0 || commandName.compare( "forward" ) == 0 ) {
+					Terminal()->print( "Driving motor 2 forward at %d speed...\n", speed );
+					if( (errCode = this->m_pMotorControllerLarge->forward( RoboClawChannels::CHANNEL2, (int8_t)speed )) != ERR_OK ) {
+						Terminal()->printImportant( "Failed to drive motor 2 forward: %s\n", GetErrorString( errCode ) );
+					}
+				}
+				if( commandName.compare( "reverse2" ) == 0 || commandName.compare( "reverse" ) == 0 ) {
+					Terminal()->print( "Driving motor 2 in reverse at %d speed...\n", speed );
+					if( (errCode = this->m_pMotorControllerLarge->reverse( RoboClawChannels::CHANNEL2, (int8_t)speed )) != ERR_OK ) {
+						Terminal()->printImportant( "Failed to drive motor 2 in reverse: %s\n", GetErrorString( errCode ) );
+					}
+				}
+			}
+			catch( const std::invalid_argument &e ) {
+				Terminal()->printImportant( "Argument was not a valid integer.\n" );
+			}
+		}
 	}
 	else {
-		Terminal()->print( "Unknown command \'%s\'\n", commandName.c_str() );
+		Terminal()->printImportant( "Unknown command \'%s\'\n", commandName.c_str() );
 	}
 }
 

@@ -8,9 +8,6 @@
 #include "motor.h"
 #include "wire_protocols.h"
 
-#include "terminal.h"
-#include "vehicle.h"
-
 uint16_t roboclaw_crc16( const std::vector<unsigned char> &buffer )
 {
 	unsigned int crc = 0;
@@ -91,36 +88,56 @@ int CMotorController::sendCommandARBBlocking( unsigned char command, const std::
 	int errCode;
 	std::vector<unsigned char> buffer;
 	size_t remainingBytes;
+	int tries;
 	
 	packet.address = m_motorAddress;
 	packet.command = command;
 	packet.valueBytes = valueBytes;
 	
-	errCode = m_pMotorUARTReference->flush();
-	if( errCode != ERR_OK )
-		return errCode;
-	if( !m_pMotorUARTReference->write( this->serializePacket( packet ) ) )
-		return ERR_UART_WRITE;
-	
-	// Wait up to 10 ms for data, or until responseLength is reached
-	std::chrono::steady_clock::time_point writeTime = std::chrono::steady_clock::now();
-	response = std::vector<unsigned char>();
-	remainingBytes = responseLength;
-	while( std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - writeTime).count() < 10 )
+	tries = 0;
+	while( tries < MOTOR_UART_TRIES )
 	{
-		if( m_pMotorUARTReference->dataAvailable() )
+		tries++;
+		
+		errCode = m_pMotorUARTReference->flush();
+		if( errCode != ERR_OK )
+			return errCode;
+		if( !m_pMotorUARTReference->write( this->serializePacket( packet ) ) )
+			return ERR_UART_WRITE;
+		
+		// Wait up to 10 ms for data, or until responseLength is reached
+		std::chrono::steady_clock::time_point writeTime = std::chrono::steady_clock::now();
+		response = std::vector<unsigned char>();
+		remainingBytes = responseLength;
+		while( std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - writeTime).count() < MOTOR_UART_WAIT_MS )
 		{
-			buffer = m_pMotorUARTReference->read( remainingBytes );
-			if( buffer.size() > 0 ) {
-				remainingBytes -= buffer.size();
-				response.insert( response.end(), buffer.begin(), buffer.end() );
-				if( remainingBytes <= 0 )
-					break;
+			if( m_pMotorUARTReference->dataAvailable() )
+			{
+				buffer = m_pMotorUARTReference->read( remainingBytes );
+				if( buffer.size() > 0 ) {
+					remainingBytes -= buffer.size();
+					response.insert( response.end(), buffer.begin(), buffer.end() );
+					if( remainingBytes <= 0 )
+						break;
+				}
 			}
+			else
+				std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) );
 		}
+		
+		
+		// Validate reponse
+		if( response.empty() && !this->verifyResponse( command, response ) )
+			continue;
 		else
-			std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) );
+			break;
 	}
+	
+	// Validate reponse
+	if( response.empty() )
+		return ERR_UART_NO_RESPONSE;
+	if( !this->verifyResponse( command, response ) )
+		return ERR_UART_INVALID_RESPONSE;
 	
 	return ERR_OK;
 }
@@ -137,6 +154,17 @@ int CMotorController::sendCommand16Blocking( unsigned char command, uint16_t val
 {
 	return ERR_OK;
 }
+
+int CMotorController::sendCommand1616Blocking( unsigned char command, uint16_t value1, uint16_t value2, size_t responseLength, std::vector<unsigned char> &response )
+{
+	std::vector<unsigned char> bytes( 4 );
+	bytes[0] = (value1 >> 8) & 0xFF;
+	bytes[1] = value1 & 0xFF;
+	bytes[2] = (value2 >> 8) & 0xFF;
+	bytes[3] = value2 & 0xFF;
+	return this->sendCommandARBBlocking( command, bytes, responseLength, response );
+}
+
 int CMotorController::sendCommand32Blocking( unsigned char command, uint32_t value, size_t responseLength, std::vector<unsigned char> &response )
 {
 	return ERR_OK;
@@ -182,12 +210,6 @@ int CMotorController::getControllerInfo( std::string &versionStr )
 	
 	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_FIRMWARE, 50, response ) ) != ERR_OK )
 		return errCode;
-	if( response.empty() )
-		return ERR_UART_NO_RESPONSE;
-		
-	// Verify response
-	if( !this->verifyResponse( RoboClawCommand::READ_FIRMWARE, response ) )
-		return ERR_UART_INVALID_RESPONSE;
 		
 	versionStr = std::string( response.begin(), response.end() );
 	// Remove line ending added by device
@@ -205,12 +227,6 @@ int CMotorController::getControllerStatus( uint16_t *pStatus )
 	
 	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_STATUS, 6, response ) ) != ERR_OK )
 		return errCode;
-	if( response.empty() )
-		return ERR_UART_NO_RESPONSE;
-
-	// Verify response
-	if( !this->verifyResponse( RoboClawCommand::READ_STATUS, response ) )
-		return ERR_UART_INVALID_RESPONSE;
 		
 	// Combine hi and low bytes and account for endianness
 	(*pStatus) = be16toh( response[1] + (response[0] << 8) );
@@ -229,15 +245,9 @@ int CMotorController::getTemperature( float *pTemp1, float *pTemp2 )
 	// Temperature 1
 	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_TEMPERATURE, 4, response ) ) != ERR_OK )
 		return errCode;
-	if( response.empty() )
-		return ERR_UART_NO_RESPONSE;
-	// Verify response
-	if( !this->verifyResponse( RoboClawCommand::READ_TEMPERATURE, response ) )
-		return ERR_UART_INVALID_RESPONSE;
 		
 	// Combine hi and low bytes and account for endianness
 	temp1 = be16toh( response[1] + response[0] << 8 );
-		
 	(*pTemp1) = temp1 * 0.1f;
 	
 	// Temperature 2
@@ -246,14 +256,8 @@ int CMotorController::getTemperature( float *pTemp1, float *pTemp2 )
 		// Temperature 2
 		if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_TEMPERATURE2, 4, response ) ) != ERR_OK )
 			return errCode;
-		if( response.empty() )
-			return ERR_UART_NO_RESPONSE;
-		// Verify response
-		if( !this->verifyResponse( RoboClawCommand::READ_TEMPERATURE2, response ) )
-			return ERR_UART_INVALID_RESPONSE;
 			
 		temp2 = be16toh( response[1] + response[0] << 8 );
-		
 		(*pTemp2) = temp2 * 0.1f;
 	}
 	
@@ -270,11 +274,24 @@ int CMotorController::getMainBatteryVoltage( float *pVoltage )
 	
 	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_VOLTAGE_MAIN, 4, response ) ) != ERR_OK )
 		return errCode;
-	if( response.empty() )
-		return ERR_UART_NO_RESPONSE;
-	// Verify response
-	if( !this->verifyResponse( RoboClawCommand::READ_VOLTAGE_MAIN, response ) )
-		return ERR_UART_INVALID_RESPONSE;
+		
+	// Combine hi and low bytes and account for endianness
+	voltage = be16toh( response[1] + response[0] << 8 );
+	(*pVoltage) = voltage * 0.1f;
+	
+	return ERR_OK;
+}
+
+int CMotorController::getLogicBatteryVoltage( float *pVoltage )
+{
+	assert( pVoltage );
+	
+	std::vector<unsigned char> response;
+	int errCode;
+	uint16_t voltage;
+	
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_VOLTAGE_LOGIC, 4, response ) ) != ERR_OK )
+		return errCode;
 		
 	// Combine hi and low bytes and account for endianness
 	voltage = be16toh( response[1] + response[0] << 8 );
@@ -309,11 +326,6 @@ int CMotorController::getConfigSettings( uint16_t *pConfigSettings )
 	
 	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_STANDARD_CONFIG, 4, response ) ) != ERR_OK )
 		return errCode;
-	if( response.empty() )
-		return ERR_UART_NO_RESPONSE;
-	// Verify response
-	if( !this->verifyResponse( RoboClawCommand::READ_STANDARD_CONFIG, response ) )
-		return ERR_UART_INVALID_RESPONSE;
 		
 	// Combine hi and low bytes and account for endianness
 	(*pConfigSettings) = be16toh( response[1] + response[0] << 8 );
@@ -321,7 +333,98 @@ int CMotorController::getConfigSettings( uint16_t *pConfigSettings )
 	return ERR_OK;
 }
 
-int CMotorController::forward( RoboClawChannels channelId, char speed )
+int CMotorController::getMotorCurrents( float *pCurrentM1, float *pCurrentM2 )
+{
+	assert( pCurrentM1 && pCurrentM2 );
+	
+	std::vector<unsigned char> response;
+	int errCode;
+	
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_MOTOR_CURRENTS, 6, response ) ) != ERR_OK )
+		return errCode;
+	
+	(*pCurrentM1) = be16toh( response[1] + response[0] << 8 ) / 100.0f;
+	(*pCurrentM2) = be16toh( response[3] + response[2] << 8 ) / 100.0f;
+	
+	return ERR_OK;
+}
+
+int CMotorController::getMotorDutyCycles( float *pDuty1, float *pDuty2 )
+{
+	assert( pDuty1 && pDuty2 );
+	
+	std::vector<unsigned char> response;
+	int errCode;
+	
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_MOTOR_PWMS, 6, response ) ) != ERR_OK )
+		return errCode;
+		
+	(*pDuty1) = be16toh( response[1] + response[0] << 8 ) / 327.67f;
+	(*pDuty2) = be16toh( response[3] + response[2] << 8 ) / 327.67f;
+	
+	return ERR_OK;
+}
+
+int CMotorController::setMainVoltageLevels( float mainMin, float mainMax )
+{
+	std::vector<unsigned char> response;
+	int errCode;
+	uint16_t minVal, maxVal;
+	
+	minVal = (uint16_t)(mainMin / 0.1f);
+	maxVal = (uint16_t)(mainMax / 0.1f);
+	
+	if( (errCode = this->sendCommand1616Blocking( RoboClawCommand::SET_MAIN_VOLTAGES, minVal, maxVal, 1, response ) ) != ERR_OK )
+		return errCode;
+	
+	return ERR_OK;
+}
+int CMotorController::setLogicVoltageLevels( float logicMin, float logicMax )
+{
+	std::vector<unsigned char> response;
+	int errCode;
+	uint16_t minVal, maxVal;
+	
+	minVal = (uint16_t)(logicMin / 0.1f);
+	maxVal = (uint16_t)(logicMax / 0.1f);
+	
+	if( (errCode = this->sendCommand1616Blocking( RoboClawCommand::SET_LOGIC_VOLTAGES, minVal, maxVal, 1, response ) ) != ERR_OK )
+		return errCode;
+	
+	return ERR_OK;
+}
+int CMotorController::getMainVoltageLevels( float *pMainMin, float *pMainMax )
+{
+	assert( pMainMin && pMainMax );
+	
+	std::vector<unsigned char> response;
+	int errCode;
+	
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_MAIN_VOLTAGES, 6, response ) ) != ERR_OK )
+		return errCode;
+		
+	(*pMainMin) = be16toh( response[1] + response[0] << 8 ) * 0.1f;
+	(*pMainMax) = be16toh( response[3] + response[2] << 8 ) * 0.1f;
+	
+	return ERR_OK;
+}
+int CMotorController::getLogicVoltageLevels( float *pLogicMin, float *pLogicMax )
+{
+	assert( pLogicMin && pLogicMax );
+	
+	std::vector<unsigned char> response;
+	int errCode;
+	
+	if( (errCode = this->sendCommandBlocking( RoboClawCommand::READ_LOGIC_VOLTAGES, 6, response ) ) != ERR_OK )
+		return errCode;
+		
+	(*pLogicMin) = be16toh( response[1] + response[0] << 8 ) * 0.1f;
+	(*pLogicMax) = be16toh( response[3] + response[2] << 8 ) * 0.1f;
+	
+	return ERR_OK;
+}
+
+int CMotorController::forward( RoboClawChannels channelId, int8_t speed )
 {
 	assert( m_pMotorUARTReference );
 	assert( channelId == RoboClawChannels::CHANNEL1 || channelId == RoboClawChannels::CHANNEL2 );
@@ -352,7 +455,7 @@ int CMotorController::forward( RoboClawChannels channelId, char speed )
 
 	return ERR_OK;
 }
-int CMotorController::reverse( RoboClawChannels channelId, char speed )
+int CMotorController::reverse( RoboClawChannels channelId, int8_t speed )
 {
 	assert( m_pMotorUARTReference );
 	assert( channelId == RoboClawChannels::CHANNEL1 || channelId == RoboClawChannels::CHANNEL2 );
