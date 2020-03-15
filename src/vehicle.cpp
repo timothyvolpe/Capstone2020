@@ -75,7 +75,7 @@ int CVehicle::initialize()
 #endif
 
 	Terminal()->printImportant( "  Setting up motor UART..." );
-	m_pMotorControllerChannel = new CUARTChannel();
+	m_pMotorControllerChannel = new CUARTChannel( "MotorChannels" );
 #ifdef __linux__
 	errCode = m_pMotorControllerChannel->open( "/dev/serial0", true, false, false, false );
 	if( errCode != ERR_OK ) {
@@ -85,7 +85,7 @@ int CVehicle::initialize()
 	errCode = m_pMotorControllerChannel->setBaudRate( B460800 );
 	errCode = m_pMotorControllerChannel->setiFlag( IGNBRK );
 	errCode = m_pMotorControllerChannel->setoFlag( 0 );
-	errCode = m_pMotorControllerChannel->setReadTimeout( 50 );
+	errCode = m_pMotorControllerChannel->setReadTimeout( 0, 50 );
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "FAILED\n" );
 		return errCode; 

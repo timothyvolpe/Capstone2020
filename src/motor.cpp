@@ -103,7 +103,7 @@ int CMotorController::sendCommandARBBlocking( unsigned char command, const std::
 		if( errCode != ERR_OK )
 			return errCode;
 		if( !m_pMotorUARTReference->write( this->serializePacket( packet ) ) )
-			return ERR_UART_WRITE;
+			return ERR_COMM_WRITE;
 		
 		// Wait up to 10 ms for data, or until responseLength is reached
 		std::chrono::steady_clock::time_point writeTime = std::chrono::steady_clock::now();
@@ -135,9 +135,9 @@ int CMotorController::sendCommandARBBlocking( unsigned char command, const std::
 	
 	// Validate reponse
 	if( response.empty() )
-		return ERR_UART_NO_RESPONSE;
+		return ERR_COMM_NO_RESPONSE;
 	if( !this->verifyResponse( command, response ) )
-		return ERR_UART_INVALID_RESPONSE;
+		return ERR_COMM_INVALID_RESPONSE;
 	
 	return ERR_OK;
 }

@@ -38,8 +38,41 @@
 /** GPS unit failed to initialize. */
 #define ERR_SENSOR_INIT_GPS				ERR_INIT_BASE + 0x4
 
+/** All comm errors start at this value */
+#define ERR_COMM_BASE					0x3000
+/** The system could not access the COMM channel for an unknown reason */
+#define ERR_COMM_OPEN_FAILED			ERR_COMM_BASE + 0x1
+/** Access was denied to the COMM channel */
+#define ERR_COMM_ACCESS_DENIED			ERR_COMM_BASE + 0x2
+/** The given COMM path did not point to a valid bus. */
+#define ERR_COMM_INVALID_PATH			ERR_COMM_BASE + 0x3
+/** The given baud rate is unsupported. */
+#define ERR_COMM_INVALID_BAUD			ERR_COMM_BASE + 0x4
+/** Failed to set the COMM attributes. */
+#define ERR_COMM_SET_ATTRIB				ERR_COMM_BASE + 0x5
+/** Failed to flush the COMM channel. */
+#define ERR_COMM_FLUSH_CHANNEL			ERR_COMM_BASE + 0x6
+/** Failed to set the COMM input flags. */
+#define ERR_COMM_SET_IFLAG				ERR_COMM_BASE + 0x7
+/** Failed to set the COMM output flags. */
+#define ERR_COMM_SET_OFLAG				ERR_COMM_BASE + 0x8
+/** Failed to set the COMM control flags. */
+#define ERR_COMM_SET_CFLAG				ERR_COMM_BASE + 0x8
+/** Failed to set the COMM read timetout. */
+#define ERR_COMM_SET_READ_TIMEOUT		ERR_COMM_BASE + 0x9
+/** The poll() operation failed. */
+#define ERR_COMM_POLL					ERR_COMM_BASE + 0xB
+/** An error occured while trying to read from the COMM channel. */
+#define ERR_COMM_READ					ERR_COMM_BASE + 0xC
+/** The device connected to the COMM did not respond. */
+#define ERR_COMM_NO_RESPONSE			ERR_COMM_BASE + 0xD
+/** Failed to write to COMM. */
+#define ERR_COMM_WRITE					ERR_COMM_BASE + 0xE
+/** The response from the COMM device was invalid. */
+#define ERR_COMM_INVALID_RESPONSE		ERR_COMM_BASE + 0xF
+
 /** All I2C errors start at this value */
-#define ERR_I2C_BASE					0x3000
+#define ERR_I2C_BASE					0x4000
 /** The system could not access the I2C bus for an unknown reason */
 #define ERR_I2C_OPEN_FAILED				ERR_I2C_BASE + 0x1
 /** Access was denied to the I2C bus */
@@ -48,45 +81,15 @@
 #define ERR_I2C_INVALID_PATH			ERR_I2C_BASE + 0x3
 
 /** All SPI errors start at this value */
-#define ERR_SPI_BASE					0x4000
+#define ERR_SPI_BASE					0x5000
 
 /** All UART errors start at this value */
-#define ERR_UART_BASE					0x5000
-/** The system could not access the UART channel for an unknown reason */
-#define ERR_UART_OPEN_FAILED			ERR_UART_BASE + 0x1
-/** Access was denied to the UART channel */
-#define ERR_UART_ACCESS_DENIED			ERR_UART_BASE + 0x2
-/** The given UART path did not point to a valid bus. */
-#define ERR_UART_INVALID_PATH			ERR_UART_BASE + 0x3
-/** The given baud rate is unsupported. */
-#define ERR_UART_INVALID_BAUD			ERR_UART_BASE + 0x4
-/** Failed to set the UART attributes. */
-#define ERR_UART_SET_ATTRIB				ERR_UART_BASE + 0x5
-/** Failed to flush the UART channel. */
-#define ERR_UART_FLUSH_CHANNEL			ERR_UART_BASE + 0x6
-/** Failed to set the UART input flags. */
-#define ERR_UART_SET_IFLAG				ERR_UART_BASE + 0x7
-/** Failed to set the UART output flags. */
-#define ERR_UART_SET_OFLAG				ERR_UART_BASE + 0x8
-/** Failed to set the UART control flags. */
-#define ERR_UART_SET_CFLAG				ERR_UART_BASE + 0x8
-/** Failed to set the UART read timetout. */
-#define ERR_UART_SET_READ_TIMEOUT		ERR_UART_BASE + 0x9
+#define ERR_UART_BASE					0x6000
 /** The UART channel is already open. */
-#define ERR_UART_ALREADY_OPEN			ERR_UART_BASE + 0xA
-/** The poll() operation failed. */
-#define ERR_UART_POLL					ERR_UART_BASE + 0xB
-/** An error occured while trying to read from the UART channel. */
-#define ERR_UART_READ					ERR_UART_BASE + 0xC
-/** The device connected to the UART did not respond. */
-#define ERR_UART_NO_RESPONSE			ERR_UART_BASE + 0xD
-/** Failed to write to UART. */
-#define ERR_UART_WRITE					ERR_UART_BASE + 0xE
-/** The response from the UART device was invalid. */
-#define ERR_UART_INVALID_RESPONSE		ERR_UART_BASE + 0xF
+#define ERR_UART_ALREADY_OPEN			ERR_UART_BASE + 0x1
 
 /** All motor controller errors start at this value. */
-#define ERR_MOTOR_BASE					0x6000
+#define ERR_MOTOR_BASE					0x7000
 
 /**
 * @brief Combines error code and error message for lookup
@@ -109,26 +112,27 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_SENSOR_INIT_IMU, "IMU sensor initialization failure." },
 	{ ERR_SENSOR_INIT_GPS, "GPS unit initialization failure." },
 
+	{ ERR_COMM_OPEN_FAILED, "The system could not access the comm channel for an unknown reason." },
+	{ ERR_COMM_ACCESS_DENIED, "Access was denied to the channel." },
+	{ ERR_COMM_INVALID_PATH, "The given port path did not point to a valid channel." },
+	{ ERR_COMM_INVALID_BAUD, "The given baud rate is unsupported." },
+	{ ERR_COMM_SET_ATTRIB, "Failed to set the port attributes." },
+	{ ERR_COMM_FLUSH_CHANNEL, "Failed to flush the channel." },
+	{ ERR_COMM_SET_IFLAG, "Failed to set the port input flags." },
+	{ ERR_COMM_SET_OFLAG, "Failed to set the port output flags." },
+	{ ERR_COMM_SET_CFLAG, "Failed to set the port control flags." },
+	{ ERR_COMM_SET_READ_TIMEOUT, "Failed to set the port read timetout." },
+	{ ERR_COMM_POLL, "The poll() operation failed." },
+	{ ERR_COMM_READ, "An error occured while trying to read from the channel." },
+	{ ERR_COMM_NO_RESPONSE, "The device connected to the port did not respond." },
+	{ ERR_COMM_WRITE, "Failed to write to port." },
+	{ ERR_COMM_INVALID_RESPONSE, "The response from the device was invalid." },
+
 	{ ERR_I2C_OPEN_FAILED, "The system could not access the I2C bus for an unknown reason." },
 	{ ERR_I2C_ACCESS_DENIED, "Access was denied to the I2C bus." },
 	{ ERR_I2C_INVALID_PATH, "The given I2C path did not point to a valid bus." },
-
-	{ ERR_UART_OPEN_FAILED, "The system could not access the UART channel for an unknown reason." },
-	{ ERR_UART_ACCESS_DENIED, "Access was denied to the UART channel." },
-	{ ERR_UART_INVALID_PATH, "The given UART path did not point to a valid channel." },
-	{ ERR_UART_INVALID_BAUD, "The given baud rate is unsupported." },
-	{ ERR_UART_SET_ATTRIB, "Failed to set the UART attributes." },
-	{ ERR_UART_FLUSH_CHANNEL, "Failed to flush the UART channel." },
-	{ ERR_UART_SET_IFLAG, "Failed to set the UART input flags." },
-	{ ERR_UART_SET_OFLAG, "Failed to set the UART output flags." },
-	{ ERR_UART_SET_CFLAG, "Failed to set the UART control flags." },
-	{ ERR_UART_SET_READ_TIMEOUT, "Failed to set the UART read timetout." },
-	{ ERR_UART_ALREADY_OPEN, "The UART channel is already open." },
-	{ ERR_UART_POLL, "The poll() operation failed." },
-	{ ERR_UART_READ, "An error occured while trying to read from the UART channel." },
-	{ ERR_UART_NO_RESPONSE, "The device connected to the UART did not respond." },
-	{ ERR_UART_WRITE, "Failed to write to UART." },
-	{ ERR_UART_INVALID_RESPONSE, "The response from the UART device was invalid." }
+	
+	{ ERR_UART_ALREADY_OPEN, "The COMM channel is already open." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])
