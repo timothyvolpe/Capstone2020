@@ -40,10 +40,10 @@ int main( int argc, char *argv[] )
 	std::cout << "Starting...\n";
 
 	// !! Do this first !!
-	std::cout << "Initializing vehicle...\n";
 	// We can use Terminal().print(...) AFTER this point
 	errCode = LocalVehicle().initialize();
 	// We can now use Terminal().print(...)
+	Terminal()->print( "\n" );
 	if( errCode != ERR_OK ) {
 		Terminal()->print( "Vehicle initialization: FAILED\n" );
 		Terminal()->print( "ERROR: %s\n", GetErrorString( errCode ) );

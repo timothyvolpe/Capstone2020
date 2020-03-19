@@ -10,8 +10,6 @@
 * @date 1/30/2020
 */
 
-#define DebugMessage( msg ) std::cout << msg << std::flush
-
 /////////////////
 // Error Codes //
 /////////////////
@@ -73,12 +71,8 @@
 
 /** All I2C errors start at this value */
 #define ERR_I2C_BASE					0x4000
-/** The system could not access the I2C bus for an unknown reason */
-#define ERR_I2C_OPEN_FAILED				ERR_I2C_BASE + 0x1
-/** Access was denied to the I2C bus */
-#define ERR_I2C_ACCESS_DENIED			ERR_I2C_BASE + 0x2
-/** The given I2C path did not point to a valid bus. */
-#define ERR_I2C_INVALID_PATH			ERR_I2C_BASE + 0x3
+/** The I2C channel is already open. */
+#define ERR_I2C_ALREADY_OPEN			ERR_I2C_BASE + 0x1
 
 /** All SPI errors start at this value */
 #define ERR_SPI_BASE					0x5000
@@ -128,10 +122,8 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_COMM_WRITE, "Failed to write to port." },
 	{ ERR_COMM_INVALID_RESPONSE, "The response from the device was invalid." },
 
-	{ ERR_I2C_OPEN_FAILED, "The system could not access the I2C bus for an unknown reason." },
-	{ ERR_I2C_ACCESS_DENIED, "Access was denied to the I2C bus." },
-	{ ERR_I2C_INVALID_PATH, "The given I2C path did not point to a valid bus." },
-	
+	{ ERR_I2C_ALREADY_OPEN, "The I2C channel is already open." },
+
 	{ ERR_UART_ALREADY_OPEN, "The COMM channel is already open." }
 };
 

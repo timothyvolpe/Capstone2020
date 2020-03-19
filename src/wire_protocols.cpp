@@ -32,7 +32,7 @@ void CWireProtocol::threadMain()
 	assert( m_hPortHandle != -1 );
 	assert( !m_threadRunning );
 	
-	DebugMessage( "COMM THREAD ENTER\n" );
+	DebugMessage( "%s THREAD ENTER\n", m_portName.c_str() );
 	m_threadRunning = true;
 	
 	fileDesc.fd = m_hPortHandle;
@@ -172,7 +172,7 @@ void CWireProtocol::threadMain()
 		Terminal()->printImportant( "Communication thread encountered an unknown exception and had to stop.\n" );
 	}
 	
-	DebugMessage( "COMM THREAD EXIT\n" );
+	DebugMessage( "%s THREAD EXIT\n", m_portName.c_str() );
 }
 
 bool CWireProtocol::flushAttributes()
@@ -272,14 +272,19 @@ void CWireProtocol::startThread()
 {
 	m_threadError = 0;
 	m_thread = std::thread( &CWireProtocol::threadMain, this );
+	
+	// Wait until thread reports running
+	if( !m_threadRunning ) {
+		std::this_thread::sleep_for( std::chrono::milliseconds(1) ); 
+	}
 }
 void CWireProtocol::stopThread()
 {
 	// Stop thread
-	if( m_threadRunning ) {
-		m_threadRunning = false;
+	m_threadRunning = false;
+	if( m_thread.joinable() )
 		m_thread.join();
-	}
+		
 	// Close channel
 	if( m_hPortHandle >= 0 ) {
 		::close( m_hPortHandle );
@@ -337,12 +342,16 @@ std::string CWireProtocol::getPortName() {
 	return m_portName;
 }
 
-//////////////////
-/////////////////////
-//////////////////////
+const int CWireProtocol::getThreadError() {
+	return m_threadError;
+}
 
-CI2CBus::CI2CBus() {
-	m_hBusHandle = -1;
+
+/////////////
+// CI2CBus //
+/////////////
+
+CI2CBus::CI2CBus( std::string portName ) : CWireProtocol( portName ) {
 }
 CI2CBus::~CI2CBus() {
 	this->close();
@@ -350,31 +359,32 @@ CI2CBus::~CI2CBus() {
 
 int CI2CBus::open( std::string busPath )
 {
-#ifdef __linux__
-	// Open the bus
-	m_hBusHandle = ::open( busPath.c_str(), O_RDWR );
-	if( m_hBusHandle == -1 )
-	{
-		if( errno == EACCES )
-			return ERR_I2C_ACCESS_DENIED;
-		else if( errno == ENOENT || errno == ENOSPC || errno == ENOTDIR || errno == EINVAL )
-			return ERR_I2C_INVALID_PATH;
-		else
-			return ERR_I2C_OPEN_FAILED;
-	}
-#endif
+	int errCode;
+	tcflag_t cflag;
+	
+	if( this->isOpen() )
+		return ERR_I2C_ALREADY_OPEN;
+		
+	// Open port
+	if( (errCode = this->openPort( busPath, O_RDWR | O_NOCTTY | O_NONBLOCK )) != ERR_OK )
+		return errCode;
+	
+	// Set port options
+	//cflag = CS8 | CLOCAL;	// message length 8 bits
+	
+	//if( (errCode = this->setcFlag( cflag )) != ERR_OK )
+		//return errCode;
+	
+	// Set read timeout and non-blocking
+	this->setReadTimeout( 0, 5 * 10 ); // 5 seconds (50 deciseconds)
+	
+	this->startThread();
 
 	return ERR_OK;
 }
 
-void CI2CBus::close()
-{
-#ifdef __linux__
-	if( m_hBusHandle >= 0 ) {
-		::close( m_hBusHandle );
-	}
-	m_hBusHandle = -1;
-#endif
+void CI2CBus::close() {
+	this->stopThread();
 }
 
 CUARTChannel::CUARTChannel( std::string portName ) : CWireProtocol( portName ) {

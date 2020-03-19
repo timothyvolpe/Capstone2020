@@ -55,31 +55,29 @@ int CVehicle::initialize()
 	m_pVehicleTerminal = new CTerminal();
 	errCode = m_pVehicleTerminal->init();
 	if( errCode != ERR_OK ) {
-		Terminal()->print( "  Failed to initialize user terminal\n" );
+		Terminal()->printImportant( "  Failed to initialize user terminal\n" );
 		return errCode;
 	}
 	Terminal()->print( "Debug logging started\n" );
+	
+	Terminal()->printImportant( "Initializing vehicle...\n\n" );
 
-	// Open communication buses
-	Terminal()->printImportant( "  Opening I2C bus..." );
-	m_pI2cBus = new CI2CBus();
-#ifdef __linux__
+	// Open i2c comm bus
+	Terminal()->startItem( "Setting up I2C bus" );
+	m_pI2cBus = new CI2CBus( "SensorI2C" );
 	errCode = m_pI2cBus->open( "/dev/i2c-1" );
 	if( errCode != ERR_OK ) {
-		Terminal()->print( "FAILED\n" );
+		Terminal()->finishItem( false );
 		return errCode;
 	}
-	Terminal()->print( "SUCCESS\n" );
-#elif WIN32
-	Terminal()->print( "Ignored in windows\n" );
-#endif
+	Terminal()->finishItem( true );
 
-	Terminal()->printImportant( "  Setting up motor UART..." );
-	m_pMotorControllerChannel = new CUARTChannel( "MotorChannels" );
-#ifdef __linux__
+	// Set uart commm channel
+	Terminal()->startItem( "Setting up motor UART" );
+	m_pMotorControllerChannel = new CUARTChannel( "MotorUART" );
 	errCode = m_pMotorControllerChannel->open( "/dev/serial0", true, false, false, false );
 	if( errCode != ERR_OK ) {
-		Terminal()->print( "FAILED\n" );
+		Terminal()->finishItem( false );
 		return errCode;
 	}
 	errCode = m_pMotorControllerChannel->setBaudRate( B460800 );
@@ -87,50 +85,53 @@ int CVehicle::initialize()
 	errCode = m_pMotorControllerChannel->setoFlag( 0 );
 	errCode = m_pMotorControllerChannel->setReadTimeout( 0, 50 );
 	if( errCode != ERR_OK ) {
-		Terminal()->print( "FAILED\n" );
+		Terminal()->finishItem( false );
 		return errCode; 
 	}
-	Terminal()->print( "SUCCESS\n" );
-#elif WIN32
-	Terminal()->print( "Ignored on windows\n" );
-#endif
+	Terminal()->finishItem( true );
 
 	// Sensors
-	Terminal()->printImportant( "  Initializing sensors...\n" );
+	Terminal()->startItem( "Initializing sensors" );
 	m_pSensorManager = new CSensorManager();
 	errCode = m_pSensorManager->initSensors();
 	if( errCode != ERR_OK ) {
-		Terminal()->print( "  Sensor initialization: FAILED\n" );
+		Terminal()->finishItem( false );
 		return errCode;
 	}
-	Terminal()->print( "  Sensor initialization: SUCCESS\n" );
+	Terminal()->finishItem( true );
 
 	// Motor Controllers
-	Terminal()->printImportant( "  Initializing motor controllers...\n" );
+	Terminal()->startItem( "Initializing motor controllers" );
+	
 	// Large controller
 	m_pMotorControllerLarge = new CMotorController( m_pMotorControllerChannel, ROBOCLAW_60A_ADDRESS );
-	Terminal()->printImportant( "    Large motor controller initialization... " );
+	Terminal()->startItem( "Large motor controller initialization" );
 	errCode = m_pMotorControllerLarge->init();
 	if( errCode != ERR_OK ) {
-		Terminal()->print( "FAILED\n" );
+		Terminal()->finishItem( false );
 		return errCode;
 	}
-	Terminal()->print( "SUCCESS\n" );
+	Terminal()->finishItem( true );
+	
 	// Small controller
 	m_pMotorControllerSmall = new CMotorController( m_pMotorControllerChannel, ROBOCLAW_30A_ADDRESS);
-	Terminal()->printImportant( "    Small motor controller initialization... " );
+	Terminal()->startItem( "Small motor controller initialization" );
 	errCode = m_pMotorControllerSmall->init();
 	if( errCode != ERR_OK ) {
-		Terminal()->print( "FAILED\n" );
+		Terminal()->finishItem( false );
 		return errCode;
 	}
-	Terminal()->print( "SUCCESS\n" );
-	Terminal()->print( "    Configuring motors... " );
+	Terminal()->finishItem( true );
+	Terminal()->finishItem( true ); // motor controllers
+	
+	// Set up motor controllers
+	Terminal()->startItem( "Configuring motors" );
 	errCode = this->setupMotors();
-	if( errCode != ERR_OK )
+	if( errCode != ERR_OK ) {
+		Terminal()->finishItem( false );
 		return errCode;
-	Terminal()->print( "SUCCESS\n" );
-	Terminal()->printImportant( "  Motor controller initialization: SUCCESS\n" );
+	}
+	Terminal()->finishItem( true );
 
 	return ERR_OK;
 }
@@ -170,6 +171,8 @@ void CVehicle::shutdown()
 int CVehicle::start()
 {
 	assert( !m_isRunning );
+	
+	int errCode;
 
 	Terminal()->print( "Ready\n" );
 	m_isRunning = true;
@@ -196,13 +199,14 @@ int CVehicle::start()
 			}
 			m_messageQueue.pop();
 		}
-		this->update();
+		if( ( errCode = this->update() ) != ERR_OK )
+			break;
 		Terminal()->update();
 	}
 
 	m_isRunning = false;
 
-	return ERR_OK;
+	return errCode;
 }
 
 void CVehicle::showMotorControllerStatus()
@@ -291,6 +295,19 @@ void CVehicle::showMotorControllerStatus()
 int CVehicle::update()
 {
 	std::chrono::steady_clock::time_point curtime = std::chrono::steady_clock::now();
+	int errCode;
+	
+	// Check comm threads for errors
+	errCode = m_pI2cBus->getThreadError();
+	if( errCode != ERR_OK ) {
+		Terminal()->printImportant( "ERROR: There was a failure in the %s thread\n", m_pI2cBus->getPortName().c_str() );
+		return errCode;
+	}
+	errCode = m_pMotorControllerChannel->getThreadError();
+	if( errCode != ERR_OK ) {
+		Terminal()->printImportant( "ERROR: There was a failure in the %s thread\n", m_pMotorControllerChannel->getPortName().c_str() );
+		return errCode;
+	}
 	
 	// Update motor if necessary
 	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1/MOTOR_UPDATE_FREQUENCY)*1000.0) )

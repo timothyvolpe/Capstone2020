@@ -39,6 +39,10 @@ uint16_t roboclaw_crc16( RoboClawPacket packet )
 	return roboclaw_crc16( data );
 }
 
+//////////////////////
+// CMotorController //
+//////////////////////
+
 CMotorController::CMotorController( CUARTChannel *pUART, unsigned char address ) 
 {
 	m_pMotorUARTReference = pUART;
@@ -485,4 +489,14 @@ int CMotorController::reverse( RoboClawChannels channelId, int8_t speed )
 		return errCode;
 
 	return ERR_OK;
+}
+
+////////////////////
+// CMotionManager //
+////////////////////
+
+CMotionManager::CMotionManager()
+{
+}
+CMotionManager::~CMotionManager() {
 }

@@ -39,6 +39,8 @@ struct message_t;
 /** used to reference the terminal */
 #define Terminal() CVehicle::instance().getTerminal()
 
+#define DebugMessage( msg, ... ) Terminal()->printImportant( msg, ##__VA_ARGS__ )
+
 /**
 * @brief Main vehicle class singleton.
 * @details This class controls the entire operation of the vehicle. It is created when the program

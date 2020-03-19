@@ -40,24 +40,28 @@ CSensorManager::~CSensorManager()
 int CSensorManager::initSensors()
 {
 	// Initialize ultrasonic sensors
-	Terminal()->print( "    Initializing ultrasonic sensors...\n" );
+	Terminal()->startItem( "Initializing ultrasonic sensors" );
 	for( unsigned int i = 0; i < ULTRASONIC_SENSOR_COUNT; i++ ) {
-		Terminal()->print( "    - Ultrasonic sensor %d...", i+1 );
+		Terminal()->startItem( "Ultrasonic sensor %d", i+1 );
 		m_pUltrasonicSensors[i] = new CUltrasonicSensor();
-		Terminal()->print( "SUCCESS\n" );
+		Terminal()->finishItem( true );
 	}
+	Terminal()->finishItem( true ); // Initializing ultrasonic sensors
+	
 	// Initialize RPLIDAR
-	Terminal()->print( "    Initializing LIDAR sensor... " );
+	Terminal()->startItem( "Initializing LIDAR sensor" );
 	m_pLIDARSensor = new CLIDARSensor();
-	Terminal()->print( "SUCCESS\n" );
+	Terminal()->finishItem( true );
+	
 	// Initialize IMU
-	Terminal()->print( "    Initializing inertial motion sensors... " );
+	Terminal()->startItem( "Initializing inertial motion sensors" );
 	m_pInertialMotionSensors = new CInertialMotionSensors();
-	Terminal()->print( "SUCCESS\n" );
+	Terminal()->finishItem( true );
+	
 	// Initialize GPS
-	Terminal()->print( "    Initializing GPS unit... " );
+	Terminal()->startItem( "Initializing GPS unit" );
 	m_pGPS = new CGlobalPositioning();
-	Terminal()->print( "SUCCESS\n" );
+	Terminal()->finishItem( true );
 
 	return ERR_OK;
 }

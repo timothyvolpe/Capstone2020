@@ -365,3 +365,17 @@ public:
 	*/
 	int reverse( RoboClawChannels channelId, int8_t speed );
 };
+
+/**
+* @brief Manages all the motors to move the vehicle.
+* @details This class handles all the motor controllers and allows the vehicle to move as one.
+*
+* @author Timothy Volpe
+* @date 3/15/2020
+*/
+class CMotionManager
+{
+public:
+	CMotionManager();
+	~CMotionManager();
+};

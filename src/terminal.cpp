@@ -18,6 +18,7 @@ OutputFile::OutputFile( std::string path ) : m_outputFile( path.c_str(), std::io
 }
 
 CTerminal::CTerminal() {
+	m_itemDepth = 0;
 }
 CTerminal::~CTerminal()
 {
@@ -88,9 +89,8 @@ void CTerminal::shutdown()
 	if( m_threadRunning ) {
 		m_threadRunning = false;
 		// Because we can't interrupt cin
-		std::cout << "\nPress enter to exit...\n";
+		m_inputThread.detach();
 	}
-	m_inputThread.join();
 }
 
 void CTerminal::flushLog()
@@ -149,4 +149,41 @@ void CTerminal::inputThreadMain()
 	}
 	
 	DebugMessage( "TERMINAL THREAD EXIT\n" );
+}
+
+void CTerminal::finishItem( bool success )
+{
+	assert( m_itemDepth > 0 );
+	
+	int height = 0;
+	int temp;
+	std::string prefix = "";
+	std::string postfix = "";
+	
+	std::unique_lock<std::mutex> lock( m_printMutex );
+	
+	m_itemDepth--;
+	height = m_nestHeight.top();
+	m_nestHeight.pop();
+	if( m_itemDepth > 0 ) {
+		assert( !m_nestHeight.empty() );
+		// Roll height into next element
+		m_nestHeight.top() += height;
+	}
+	
+	// Go back to top
+	if( height > 0 ) {
+		for( int i = 0; i < height; i++ ) {
+			prefix += "\x1B[1F";
+			postfix += "\x1B[1E";
+		}
+		prefix += '\r';
+	}
+	
+	if( success )
+		std::cout << std::flush << prefix + " [ \033[32mSUCCESS\033[39m ]" + postfix << std::flush;
+	else
+		std::cout << prefix + " [ \033[31mFAILED\033[39m  ]" + postfix << std::flush;
+	
+	lock.unlock();
 }

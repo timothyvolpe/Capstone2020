@@ -43,7 +43,7 @@ private:
 	termios m_portOptions;
 	
 	std::thread m_thread;
-	int m_threadError;
+	std::atomic<int> m_threadError;
 	std::atomic<bool> m_threadRunning;
 	
 	void threadMain();
@@ -193,6 +193,12 @@ public:
 	* @returns The name of the port
 	*/
 	std::string getPortName();
+	
+	/**
+	* @brief Gets current thread error code
+	* @returns Thread error code, which will be #ERR_OK if no error occured.
+	*/
+	const int getThreadError();
 };
 
 /**
@@ -202,13 +208,11 @@ public:
 * @author Timothy Volpe
 * @date 2/27/2020
 */
-class CI2CBus
+class CI2CBus : public CWireProtocol
 {
-private:
-	int m_hBusHandle;
 public:
 	/* Default constructor */
-	CI2CBus();
+	CI2CBus( std::string portName );
 	/**
 	* @brief Default destructor. Closes bus handle.
 	* @details Although the destructor automatically closes the bus handle, it is good practice
