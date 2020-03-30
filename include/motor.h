@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 #include <string>
+#include <chrono>
+#include <queue>
 
 /**
 * @file motor.h
@@ -16,8 +18,15 @@
 /** The maximum valid address. There are 8 possible addresses. */
 #define ROBOCLAW_ADDRESS_MAX 0x87
 
+/** The version string should always start with this. */
+#define ROBOCLAW_VERSION_PREFIX "USB Roboclaw"
+/** The required major version number */
+#define ROBOCLAW_VERSION_REQUIRED_MAJOR 4
+
 /** How often to update the motor controllers, in Hz */
 #define MOTOR_UPDATE_FREQUENCY 1
+/** How often to verify a controller's settings, in seconds. For each individual controller, multiple this by the # of controllers */
+#define MOTOR_VERIFY_FREQUENCY_S 5
 
 /** How long to wait for data to be returned from the UART before timing out */
 #define MOTOR_UART_WAIT_MS 10
@@ -149,6 +158,45 @@ uint16_t roboclaw_crc16( RoboClawPacket packet );
 uint16_t roboclaw_crc16( const std::vector<unsigned char> &buffer );
 
 /**
+* @brief This is used for comparing motor controller float values
+* @details The floats are compared to 3 decimal places
+* @returns True if floats are similar to 3 decimal places, false if otherwise
+* @warning Use for other float comparisons at your own risk
+*/
+bool compareMotorFloats( float a, float b );
+
+/**
+* @brief Holds the motor controller settings.
+* @details Used to easily compare with what the motor controller reports,
+* to check for unexpected changes.
+*/
+struct MotorControllerSettings
+{
+	uint16_t 	iConfig;
+	float		fMainVoltageMax;
+	float		fMainVoltageMin;
+	float		fLogicVoltageMax;
+	float		fLogicVoltageMin;
+};
+/**
+* @brief Holds the most recently retrieved controller status.
+* @details Used to prevent repeated unnecessasry communication with motor controller
+* in non-critical operations.
+*/
+struct MotorControllerStatus
+{
+	uint16_t	iStatus;
+	float		fTemp1;
+	float		fTemp2;
+	float		fMainVoltage;
+	float		fLogicVoltage;
+	float		fCurrent1;
+	float		fCurrent2;
+	float		fDuty1;
+	float		fDuty2;
+};	
+
+/**
 * @brief RoboClaw Basicmicro 2 channel motor controller interface.
 * @details This class can communicate via UART with a RoboClaw motor controller.
 *
@@ -160,6 +208,10 @@ class CMotorController
 private:
 	/** Do not delete this, it should be a reference to one owned by CVehicle. */
 	CUARTChannel *m_pMotorUARTReference;
+	
+	std::string m_controllerVersion;
+	MotorControllerSettings m_controllerSettings;
+	MotorControllerStatus m_controllerStatus;
 	
 	unsigned char m_motorAddress;
 	
@@ -253,8 +305,58 @@ public:
 	CMotorController( CUARTChannel *pUART, unsigned char address );
 	~CMotorController();
 
-	int init();
+	/**
+	* @brief Starts motor controller communication and verifies version
+	* @returns Returns #ERR_OK on success, or appropriate error code on failure
+	* @warning Do not call until UART channel is ready.
+	*/
+	int start();
+	/**
+	* @brief Cleans up motor controller assets
+	*/
 	void shutdown();
+	
+	/**
+	* @brief This will download the controller settings from the controller, check for changes, and correct if needed.
+	* @details If checkChanges is set to true, but correctChanges is not, the downloaded settings will not be saved and will only be used to report changes.
+	* If checkChanges and correctChanges are both true, the local settings will be applied to the controller if there is a mismatch. If both are false, then the settings are saved locally,
+	* which will overwrite previous settings.
+	* @param[in]	checkChanges	If true, any differences between what the controller reports and the store settings will result in an error.
+	* @param[in]	correctChanges	If true, any differences on the controller will be replaced with the local settings. An warning will be shown, but no error.
+	* @returns Returns #ERR_OK if successfully downloaded settings and no error occured, or an appropriate error on communication error, or if there was an unexpected change that was not corrected.
+	* @warning If checkChanges is true, the status it not saved; only checked against current local values
+	*/
+	int downloadControllerSettings( bool checkChanges, bool correctChanges );
+	/**
+	* @brief This will download all the  controller status info from the controller
+	* @details This can be used to save this information for use in an update frame, to prevent repeated requests
+	* from the controller.
+	* @return Returns #ERR_OK if successfully downloaded the status, or an appropraite error on communication error.
+	*/
+	int downloadControllerStatus();
+	
+	/**
+	* @brief Gets the motor controller version read at startup
+	* @details Used to prevent unnecessary UART communication
+	* @returns Motor controller version saved at startup
+	*/
+	std::string getSavedVersion();
+	
+	/**
+	* @brief Gets the local controller settings
+	* @details These are downloaded from the motor controller periodically, so are not necessarily up-to-date
+	* @returns Local controller settings
+	* @warning For critical operations, request the settings directly, do not use this function.
+	*/
+	MotorControllerSettings getControllerSettings();
+	
+	/**
+	* @brief Gets the local controller status
+	* @details These are downloaded from the motor controller on request. Call #downloadControllerStatus before using this function.
+	* @returns Local controller status
+	* @warning Do not use this for critical operations unless you understand how it works
+	*/
+	MotorControllerStatus getControllerStatus();
 	
 	/**
 	* @brief Gets the motor controller information.
@@ -395,7 +497,10 @@ private:
 	CUARTChannel *m_pControllerChannel;
 	
 	CMotorController *m_pMotorControllerProps;
-	CMotorController *m_pMotorControllerDoor;
+	CMotorController *m_pMotorControllerDoors;
+	
+	std::queue<CMotorController*> m_verifyQueue;
+	std::chrono::steady_clock::time_point m_lastVerification;
 	
 	/**
 	* @brief Setup motor controllers

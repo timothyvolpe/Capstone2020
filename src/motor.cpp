@@ -4,6 +4,7 @@
 #include <cstring>
 #include <algorithm>
 #include <endian.h>
+#include <cmath>
 #include "def.h"
 #include "motor.h"
 #include "wire_protocols.h"
@@ -40,6 +41,10 @@ uint16_t roboclaw_crc16( RoboClawPacket packet )
 	return roboclaw_crc16( data );
 }
 
+bool compareMotorFloats( float a, float b ) {
+	return std::abs( a-b ) < 0.001f;
+}
+
 //////////////////////
 // CMotorController //
 //////////////////////
@@ -51,12 +56,53 @@ CMotorController::CMotorController( CUARTChannel *pUART, unsigned char address )
 	
 	m_lastForwardSpeedSet = 0;
 	m_lastReverseSpeedSet = 0;
+	
+	m_controllerVersion = "";
 }
 CMotorController::~CMotorController() {
 	m_pMotorUARTReference = 0;
 }
 
-int CMotorController::init() {
+int CMotorController::start()
+{
+	int errCode;
+	std::string controllerVersion;
+	std::string versionPrefix = std::string( ROBOCLAW_VERSION_PREFIX );
+	std::string versionNoPre;
+	
+	// Attempt to read version
+	if( (errCode == this->getControllerInfo( controllerVersion )) != ERR_OK )
+		return errCode;
+	m_controllerVersion = controllerVersion;
+	// Check version against required
+	try
+	{
+		if( versionPrefix.compare( controllerVersion.substr( 0, versionPrefix.length() ) ) != 0 ) {
+			Terminal()->printImportant( "Invalid motor controller version \'%s\'\n", controllerVersion.c_str() );
+			return ERR_MOTOR_VERSION_MISMATCH;
+		}
+		versionNoPre = controllerVersion.substr( versionPrefix.length()+1, std::string::npos );
+		// Find the space
+		size_t spaceLoc = versionNoPre.find( ' ', 0 );
+		std::string versionNum = versionNoPre.substr( spaceLoc+2, std::string::npos );
+		// Find major version
+		size_t firstDelimLoc = versionNum.find( '.', 0 );
+		std::string versionMajorStr = versionNum.substr( 0, firstDelimLoc );
+		int versionMajor = std::stoi( versionMajorStr );
+		if( versionMajor != ROBOCLAW_VERSION_REQUIRED_MAJOR ) {
+			Terminal()->printImportant( "Only motor controller version %d is supported, controller was version %d\n", ROBOCLAW_VERSION_REQUIRED_MAJOR, versionMajor );
+			return ERR_MOTOR_VERSION_MISMATCH;
+		}
+	}
+	catch( const std::out_of_range &e ) {
+		Terminal()->printImportant( "Invalid motor controller version \'%s\'\n", controllerVersion.c_str() );
+		return ERR_MOTOR_VERSION_MISMATCH;
+	}
+	catch( const std::invalid_argument &e ) {
+		Terminal()->printImportant( "Invalid motor controller version \'%s\'\n", controllerVersion.c_str() );
+		return ERR_MOTOR_VERSION_MISMATCH;
+	}
+	
 	return ERR_OK;
 }
 void CMotorController::shutdown() {
@@ -204,6 +250,123 @@ bool CMotorController::verifyResponse( unsigned char command, const std::vector<
 		return false;
 		
 	return true;
+}
+
+int CMotorController::downloadControllerSettings( bool checkChanges, bool correctChanges )
+{
+	int errCode;
+	uint16_t motorConfig;
+	float mainMin, mainMax;
+	float logicMin, logicMax;
+	
+	DebugMessage( "Verifying controller settings...\n" );
+	
+	if( (errCode = this->getConfigSettings( &motorConfig )) != ERR_OK )
+		return errCode;
+	if( checkChanges )
+	{
+		if( motorConfig != m_controllerSettings.iConfig ) {
+			Terminal()->printImportant( "Controller config was unexpectedly changed, this must be corrected manually.\n" );
+			return ERR_MOTOR_VERIFY_FAILED;
+		}
+	}
+	else
+		m_controllerSettings.iConfig = motorConfig;
+	
+	if( (errCode = this->getMainVoltageLevels( &mainMin, &mainMax )) != ERR_OK )
+		return errCode;
+	if( checkChanges )
+	{
+		if( !compareMotorFloats( mainMin, m_controllerSettings.fMainVoltageMin ) || !compareMotorFloats( mainMax, m_controllerSettings.fMainVoltageMax ) ) {
+			Terminal()->printImportant( "Controller main voltage limits were unexpectedly changed\n" );
+			if( !correctChanges )
+				return ERR_MOTOR_VERIFY_FAILED;
+			else {
+				if( (errCode = this->setMainVoltageLevels( m_controllerSettings.fMainVoltageMin, m_controllerSettings.fLogicVoltageMax )) != ERR_OK ) {
+					Terminal()->printImportant( "Failed to correct setting: %d (%s)\n", errCode, GetErrorString( errCode ) );
+					return ERR_MOTOR_VERIFY_FAILED;
+				}
+			}
+		}
+	}
+	else {
+		m_controllerSettings.fMainVoltageMin = mainMin;
+		m_controllerSettings.fMainVoltageMax = mainMax;
+	}
+		
+	if( (errCode = this->getLogicVoltageLevels( &logicMin, &logicMax )) != ERR_OK )
+		return errCode;
+	if( checkChanges )
+	{
+		if( !compareMotorFloats( logicMin, m_controllerSettings.fLogicVoltageMin ) || !compareMotorFloats( logicMax, m_controllerSettings.fLogicVoltageMax ) ) {
+			Terminal()->printImportant( "Controller logic voltage limits were unexpectedly changed\n" );
+			if( !correctChanges )
+				return ERR_MOTOR_VERIFY_FAILED;
+			else {
+				if( (errCode = this->setMainVoltageLevels( m_controllerSettings.fLogicVoltageMin, m_controllerSettings.fLogicVoltageMax )) != ERR_OK ) {
+					Terminal()->printImportant( "Failed to correct setting: %d (%s)\n", errCode, GetErrorString( errCode ) );
+					return ERR_MOTOR_VERIFY_FAILED;
+				}
+			}
+		}
+	}
+	else {
+		m_controllerSettings.fLogicVoltageMin = logicMin;
+		m_controllerSettings.fLogicVoltageMax = logicMax;
+	}
+	
+	return ERR_OK;
+}
+
+int CMotorController::downloadControllerStatus()
+{
+	int errCode;
+	float mainVoltage;
+	float logicVoltage;
+	uint16_t motorStatus;
+	float temp1, temp2;
+	float current1, current2;
+	float duty1, duty2;
+	
+	if( (errCode = this->getControllerStatus( &motorStatus )) != ERR_OK )
+		return errCode;
+	m_controllerStatus.iStatus = motorStatus;
+		
+	if( (errCode = this->getTemperature( &temp1, &temp2 )) != ERR_OK )
+		return errCode;
+	m_controllerStatus.fTemp1 = temp1;
+	m_controllerStatus.fTemp2 = temp2;
+		
+	if( (errCode = this->getMainBatteryVoltage( &mainVoltage )) != ERR_OK )
+		return errCode;
+	m_controllerStatus.fMainVoltage = mainVoltage;
+		
+	if( (errCode = this->getLogicBatteryVoltage( &logicVoltage )) != ERR_OK )
+		return errCode;
+	m_controllerStatus.fLogicVoltage = logicVoltage;
+		
+	if( (errCode = this->getMotorCurrents( &current1, &current2 )) != ERR_OK )
+		return errCode;
+	m_controllerStatus.fCurrent1 = current1;
+	m_controllerStatus.fCurrent2 = current2;
+	
+	if( (errCode = this->getMotorDutyCycles( &duty1, &duty2 )) != ERR_OK )
+		return errCode;
+	m_controllerStatus.fDuty1 = duty1;
+	m_controllerStatus.fDuty2 = duty2;
+	
+	return ERR_OK;
+}
+
+std::string CMotorController::getSavedVersion() {
+	return m_controllerVersion;
+}
+
+MotorControllerSettings CMotorController::getControllerSettings() {
+	return m_controllerSettings;
+}
+MotorControllerStatus CMotorController::getControllerStatus() {
+	return m_controllerStatus;
 }
 
 int CMotorController::getControllerInfo( std::string &versionStr )
@@ -381,6 +544,9 @@ int CMotorController::setMainVoltageLevels( float mainMin, float mainMax )
 	
 	if( (errCode = this->sendCommand1616Blocking( RoboClawCommand::SET_MAIN_VOLTAGES, minVal, maxVal, 1, response ) ) != ERR_OK )
 		return errCode;
+		
+	m_controllerSettings.fMainVoltageMin = mainMin;
+	m_controllerSettings.fMainVoltageMax = mainMax;
 	
 	return ERR_OK;
 }
@@ -395,6 +561,9 @@ int CMotorController::setLogicVoltageLevels( float logicMin, float logicMax )
 	
 	if( (errCode = this->sendCommand1616Blocking( RoboClawCommand::SET_LOGIC_VOLTAGES, minVal, maxVal, 1, response ) ) != ERR_OK )
 		return errCode;
+		
+	m_controllerSettings.fLogicVoltageMin = logicMin;
+	m_controllerSettings.fLogicVoltageMax = logicMax;
 	
 	return ERR_OK;
 }
@@ -516,38 +685,20 @@ int CMotionManager::initialize()
 		Terminal()->finishItem( false );
 		return errCode;
 	}
-	
 	Terminal()->finishItem( true );
 	
-	// Setup motor controllers
-	// Prop controller
+	// Create motor controllers
 	m_pMotorControllerProps = new CMotorController( m_pControllerChannel, ROBOCLAW_PROPS_ADDRESS );
-	Terminal()->startItem( "Propeller motor controller initialization" );
-	errCode = m_pMotorControllerProps->init();
-	if( errCode != ERR_OK ) {
-		Terminal()->finishItem( false );
-		return errCode;
-	}
-	Terminal()->finishItem( true );
-	
-	// Small controller
-	m_pMotorControllerDoor = new CMotorController( m_pControllerChannel, ROBOCLAW_DOORS_ADDRESS);
-	Terminal()->startItem( "Door motor controller initialization" );
-	errCode = m_pMotorControllerDoor->init();
-	if( errCode != ERR_OK ) {
-		Terminal()->finishItem( false );
-		return errCode;
-	}
-	Terminal()->finishItem( true );
+	m_pMotorControllerDoors = new CMotorController( m_pControllerChannel, ROBOCLAW_DOORS_ADDRESS);
 	
 	return ERR_OK;
 }
 void CMotionManager::shutdown()
 {
-	if( m_pMotorControllerDoor ) {
-		m_pMotorControllerDoor->shutdown();
-		delete m_pMotorControllerDoor;
-		m_pMotorControllerDoor = 0;
+	if( m_pMotorControllerDoors ) {
+		m_pMotorControllerDoors->shutdown();
+		delete m_pMotorControllerDoors;
+		m_pMotorControllerDoors = 0;
 	}
 	if( m_pMotorControllerProps ) {
 		m_pMotorControllerProps->shutdown();
@@ -565,6 +716,7 @@ int CMotionManager::start()
 {
 	int errCode;
 	
+	// Setup UART for communication
 	if( (errCode = m_pControllerChannel->setBaudRate( B460800 ) ) != ERR_OK )
 		return errCode; 
 	if( (errCode = m_pControllerChannel->setiFlag( IGNBRK ) ) != ERR_OK )
@@ -573,6 +725,39 @@ int CMotionManager::start()
 		return errCode; 
 	if( (errCode = m_pControllerChannel->setReadTimeout( 0, 50 ) ) != ERR_OK )
 		return errCode; 
+		
+	// Setup motor controllers
+	// Prop controller
+	Terminal()->startItem( "Propeller motor controller starting" );
+	errCode = m_pMotorControllerProps->start();
+	if( errCode != ERR_OK ) {
+		Terminal()->finishItem( false );
+		return errCode;
+	}
+	Terminal()->finishItem( true );
+	
+	// Small controller
+	/*Terminal()->startItem( "Door motor controller starting" );
+	errCode = m_pMotorControllerDoors->start();
+	if( errCode != ERR_OK ) {
+		Terminal()->finishItem( false );
+		return errCode;
+	}
+	Terminal()->finishItem( true );*/
+	
+	// Add to verification queue
+	m_verifyQueue.push( m_pMotorControllerProps );
+	//m_verifyQueue.push( m_pMotorControllerDoors );
+		
+	// Download settings
+	if( (errCode = m_pMotorControllerProps->downloadControllerSettings( false, false ) ) != ERR_OK ) {
+		Terminal()->printImportant( "There was a failure downloading the prop controller settings\n" );
+		return errCode;
+	}
+	/*if( (errCode = m_pMotorControllerDoors->downloadControllerSettings( false ) ) != ERR_OK ) {
+		Terminal()->printImportant( "There was a failure downloading the door controller settings\n" );
+		return errCode;
+	}*/
 		
 	// Set up motor controllers
 	Terminal()->startItem( "Configuring motors" );
@@ -588,12 +773,29 @@ int CMotionManager::start()
 
 int CMotionManager::update()
 {
+	std::chrono::steady_clock::time_point curtime = std::chrono::steady_clock::now();
 	int errCode;
 	
+	// Make sure UART thread is okay
 	errCode = m_pControllerChannel->getThreadError();
 	if( errCode != ERR_OK ) {
 		Terminal()->printImportant( "ERROR: There was a failure in the %s thread\n", m_pControllerChannel->getPortName().c_str() );
 		return errCode;
+	}
+	
+	// Periodically verify motor a controller's settings in order of queue
+	if( std::chrono::duration_cast<std::chrono::seconds>(curtime - m_lastVerification).count() > MOTOR_VERIFY_FREQUENCY_S )
+	{
+		assert( m_verifyQueue.size() > 0 );
+		
+		CMotorController *pVerifyController = m_verifyQueue.front();
+		m_verifyQueue.pop();
+		m_verifyQueue.push( pVerifyController ); // move to back
+		
+		if( (errCode = pVerifyController->downloadControllerSettings( true, true ) ) != ERR_OK )
+			return errCode;
+		
+		m_lastVerification = curtime;
 	}
 	
 	return ERR_OK;
@@ -602,84 +804,48 @@ int CMotionManager::update()
 void CMotionManager::printMotorStatus()
 {
 	int errCode;
-	std::string version;
-	uint16_t motorStatus;
-	float temp1, temp2;
-	uint16_t motorConfig;
 	float mainVoltage;
 	float logicVoltage;
-	float mainMin, mainMax;
-	float logicMin, logicMax;
+	uint16_t motorStatus;
+	float temp1, temp2;
 	float current1, current2;
 	float duty1, duty2;
+	uint16_t motorConfig;
+	float mainMin, mainMax;
+	float logicMin, logicMax;
 	
-	if( (errCode = m_pMotorControllerProps->getControllerInfo( version )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get controller info: %s\n", GetErrorString( errCode ) ); 
-	}
-	else
-		Terminal()->print( "Controller Version:\t%s\n", version.c_str() );
+	MotorControllerSettings propSettings;
+	MotorControllerStatus propStatus;
 	
-	if( (errCode = m_pMotorControllerProps->getControllerStatus( &motorStatus )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor controller status: %s\n", GetErrorString( errCode ) );
-	}
-	else
-		Terminal()->print( "Controller Status:\t%04X\n", motorStatus );
-		
-	if( (errCode = m_pMotorControllerProps->getTemperature( &temp1, &temp2 )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor controller temp: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Temperature 1:\t\t%.2f C\n", temp1 ); 
-		Terminal()->print( "Temperature 2:\t\t%.2f C\n", temp2 ); 
-	}
-
-	if( (errCode = m_pMotorControllerProps->getConfigSettings( &motorConfig )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor controller config: %s\n", GetErrorString( errCode ) );
-	}
-	else
-		Terminal()->print( "Standard Config:\t%04X\n", motorConfig ); 
-		
-	if( (errCode = m_pMotorControllerProps->getMainBatteryVoltage( &mainVoltage )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get main battery voltage: %s\n", GetErrorString( errCode ) );
-	}
-	else
-		Terminal()->print( "Battery Voltage:\t%.1f V\n", mainVoltage ); 
-		
-	if( (errCode = m_pMotorControllerProps->getLogicBatteryVoltage( &logicVoltage )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get logic battery voltage: %s\n", GetErrorString( errCode ) );
-	}
-	else
-		Terminal()->print( "Logic Battery Voltage:\t%.1f V\n", logicVoltage ); 
+	// Download settings
+	// Force a check so that everything is up to date
+	m_pMotorControllerProps->downloadControllerSettings( true, true );
 	
-	if( (errCode = m_pMotorControllerProps->getMainVoltageLevels( &mainMin, &mainMax )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get main battery voltage levels: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Main Voltage Limits:\t%.1f V - %.1f V\n", mainMin, mainMax ); 
-	}
-		
-	if( (errCode = m_pMotorControllerProps->getLogicVoltageLevels( &logicMin, &logicMax )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get logic battery voltage levels: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Logic Voltage Limits:\t%.1f V - %.1f V\n", logicMin, logicMax ); 
-	}
-		
-	if( (errCode = m_pMotorControllerProps->getMotorCurrents( &current1, &current2 )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor currents: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Motor Current 1:\t%.3f A\n", current1 ); 
-		Terminal()->print( "Motor Current 2:\t%.3f A\n", current2 ); 
+	// Download statuses
+	if( (errCode = m_pMotorControllerProps->downloadControllerStatus() ) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get controller status: %d (%s)\n", errCode, GetErrorString( errCode ) );
+		return;
 	}
 	
-	if( (errCode = m_pMotorControllerProps->getMotorDutyCycles( &duty1, &duty2 )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor duty cycles: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Motor Duty Cycle 1:\t%.1f%%\n", duty1 ); 
-		Terminal()->print( "Motor Duty Cycle 2:\t%.1f%%\n", duty2 ); 
-	}
+	propSettings = m_pMotorControllerProps->getControllerSettings();
+	propStatus = m_pMotorControllerProps->getControllerStatus();
+	
+	Terminal()->printImportant( "\nMotor Controller Status:\n" );
+	Terminal()->print( "Controller Version:\t%s\n\n", m_pMotorControllerProps->getSavedVersion().c_str() );
+	
+	Terminal()->print( "Standard Config:\t%04X\n", propSettings.iConfig ); 
+	Terminal()->print( "Main Voltage Limits:\t%.1f V - %.1f V\n", propSettings.fMainVoltageMin, propSettings.fMainVoltageMax );
+	Terminal()->print( "Logic Voltage Limits:\t%.1f V - %.1f V\n\n", propSettings.fLogicVoltageMin, propSettings.fLogicVoltageMax ); 
+	
+	Terminal()->print( "Controller Status:\t%04X\n", propStatus.iStatus );
+	Terminal()->print( "Temperature 1:\t\t%.2f C\n", propStatus.fTemp1 ); 
+	Terminal()->print( "Temperature 2:\t\t%.2f C\n", propStatus.fTemp2 ); 
+	Terminal()->print( "Battery Voltage:\t%.1f V\n", propStatus.fMainVoltage ); 
+	Terminal()->print( "Logic Battery Voltage:\t%.1f V\n", propStatus.fLogicVoltage ); 
+	Terminal()->print( "Motor Current 1:\t%.3f A\n", propStatus.fCurrent1 ); 
+	Terminal()->print( "Motor Current 2:\t%.3f A\n", propStatus.fCurrent2 ); 
+	Terminal()->print( "Motor Duty Cycle 1:\t%.1f%%\n", propStatus.fDuty1 ); 
+	Terminal()->print( "Motor Duty Cycle 2:\t%.1f%%\n", propStatus.fDuty2 ); 
 }
 
 int CMotionManager::setupMotors()
@@ -690,7 +856,7 @@ int CMotionManager::setupMotors()
 		Terminal()->printImportant( "Failed to set logic level limits on prop controller\n" );
 		return errCode;
 	}
-	/*if( (errCode = m_pMotorControllerDoor->setMainVoltageLevels( ROBOCLAW_BATTERY_MIN, ROBOCLAW_BATTERY_MAX )) != ERR_OK ) {
+	/*if( (errCode = m_pMotorControllerDoors->setMainVoltageLevels( ROBOCLAW_BATTERY_MIN, ROBOCLAW_BATTERY_MAX )) != ERR_OK ) {
 		Terminal()->printImportant( "Failed to set logic level limits on door controller\n" );
 		return errCode;
 	}*/
@@ -702,5 +868,5 @@ CMotorController* CMotionManager::getPropController() {
 	return m_pMotorControllerProps;
 }
 CMotorController* CMotionManager::getDoorController() {
-	return m_pMotorControllerDoor;
+	return m_pMotorControllerDoors;
 }

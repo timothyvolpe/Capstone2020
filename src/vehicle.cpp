@@ -229,9 +229,7 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 		Terminal()->print( "reverse2 [speed]\t- Drive main motor on channel 2 in reverse. Speed 0-127\n" );
 		Terminal()->printImportant( "\n" );
 	}
-	else if( commandName.compare( "mocstatus" ) == 0 )
-	{
-		Terminal()->printImportant( "\nMotor Controller Status:\n" );
+	else if( commandName.compare( "mocstatus" ) == 0 ) {
 		m_pMotionManager->printMotorStatus();
 		Terminal()->printImportant( "\n" );
 	}

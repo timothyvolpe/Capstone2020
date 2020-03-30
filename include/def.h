@@ -84,6 +84,10 @@
 
 /** All motor controller errors start at this value. */
 #define ERR_MOTOR_BASE					0x7000
+/** Unexpected change in motor controller settings */
+#define ERR_MOTOR_VERIFY_FAILED				ERR_MOTOR_BASE + 0x1
+/** The motor controller version is not supported */
+#define ERR_MOTOR_VERSION_MISMATCH			ERR_MOTOR_BASE + 0x2
 
 /**
 * @brief Combines error code and error message for lookup
@@ -124,7 +128,11 @@ static const error_message_t ErrorMessageTable[] = {
 
 	{ ERR_I2C_ALREADY_OPEN, "The I2C channel is already open." },
 
-	{ ERR_UART_ALREADY_OPEN, "The COMM channel is already open." }
+	{ ERR_UART_ALREADY_OPEN, "The COMM channel is already open." },
+	
+	{ ERR_MOTOR_VERIFY_FAILED, "Unexpected change in motor controller settings" },
+	
+	{ ERR_MOTOR_VERSION_MISMATCH, "The motor controller version is not supported" }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])

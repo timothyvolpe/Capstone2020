@@ -33,7 +33,6 @@ void CWireProtocol::threadMain()
 	assert( !m_threadRunning );
 	
 	DebugMessage( "%s THREAD ENTER\n", m_portName.c_str() );
-	m_threadRunning = true;
 	
 	fileDesc.fd = m_hPortHandle;
 	fileDesc.events = POLLIN | POLLOUT | POLLERR;
@@ -44,6 +43,7 @@ void CWireProtocol::threadMain()
 	
 	try
 	{
+		m_threadRunning = true;
 		while( m_threadRunning )
 		{		
 			// Check for serial events
