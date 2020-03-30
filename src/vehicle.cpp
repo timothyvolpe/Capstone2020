@@ -19,31 +19,12 @@ CVehicle::CVehicle() {
 	m_isRunning = false;
 
 	m_pI2cBus = 0;
-	m_pMotorControllerChannel = 0;
-
-	m_pMotorControllerLarge = 0;
-	m_pMotorControllerSmall = 0;
+	m_pMotionManager = 0;
 	
 	m_lastMotorUpdate = std::chrono::steady_clock::now(); 
 }
 CVehicle::~CVehicle()
 {
-}
-
-int CVehicle::setupMotors()
-{
-	int errCode;
-	
-	if( (errCode = m_pMotorControllerLarge->setLogicVoltageLevels( ROBOCLAW_LOGIC_MIN, ROBOCLAW_LOGIC_MAX )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to set logic level limits\n" );
-		return errCode;
-	}
-	if( (errCode = m_pMotorControllerLarge->setMainVoltageLevels( ROBOCLAW_BATTERY_MIN, ROBOCLAW_BATTERY_MAX )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to set logic level limits\n" );
-		return errCode;
-	}
-	
-	return ERR_OK;
 }
 
 int CVehicle::initialize()
@@ -72,24 +53,6 @@ int CVehicle::initialize()
 	}
 	Terminal()->finishItem( true );
 
-	// Set uart commm channel
-	Terminal()->startItem( "Setting up motor UART" );
-	m_pMotorControllerChannel = new CUARTChannel( "MotorUART" );
-	errCode = m_pMotorControllerChannel->open( "/dev/serial0", true, false, false, false );
-	if( errCode != ERR_OK ) {
-		Terminal()->finishItem( false );
-		return errCode;
-	}
-	errCode = m_pMotorControllerChannel->setBaudRate( B460800 );
-	errCode = m_pMotorControllerChannel->setiFlag( IGNBRK );
-	errCode = m_pMotorControllerChannel->setoFlag( 0 );
-	errCode = m_pMotorControllerChannel->setReadTimeout( 0, 50 );
-	if( errCode != ERR_OK ) {
-		Terminal()->finishItem( false );
-		return errCode; 
-	}
-	Terminal()->finishItem( true );
-
 	// Sensors
 	Terminal()->startItem( "Initializing sensors" );
 	m_pSensorManager = new CSensorManager();
@@ -101,60 +64,35 @@ int CVehicle::initialize()
 	Terminal()->finishItem( true );
 
 	// Motor Controllers
-	Terminal()->startItem( "Initializing motor controllers" );
+	Terminal()->startItem( "Initializing motion manager" );
 	
-	// Large controller
-	m_pMotorControllerLarge = new CMotorController( m_pMotorControllerChannel, ROBOCLAW_60A_ADDRESS );
-	Terminal()->startItem( "Large motor controller initialization" );
-	errCode = m_pMotorControllerLarge->init();
-	if( errCode != ERR_OK ) {
+	m_pMotionManager = new CMotionManager( "/dev/serial0" );
+	if( (errCode = m_pMotionManager->initialize()) != ERR_OK ) {
 		Terminal()->finishItem( false );
 		return errCode;
 	}
 	Terminal()->finishItem( true );
 	
-	// Small controller
-	m_pMotorControllerSmall = new CMotorController( m_pMotorControllerChannel, ROBOCLAW_30A_ADDRESS);
-	Terminal()->startItem( "Small motor controller initialization" );
-	errCode = m_pMotorControllerSmall->init();
-	if( errCode != ERR_OK ) {
+	Terminal()->startItem( "Starting motion manager" );
+	if( (errCode = m_pMotionManager->start()) != ERR_OK ) {
 		Terminal()->finishItem( false );
 		return errCode;
 	}
-	Terminal()->finishItem( true );
-	Terminal()->finishItem( true ); // motor controllers
 	
-	// Set up motor controllers
-	Terminal()->startItem( "Configuring motors" );
-	errCode = this->setupMotors();
-	if( errCode != ERR_OK ) {
-		Terminal()->finishItem( false );
-		return errCode;
-	}
 	Terminal()->finishItem( true );
 
 	return ERR_OK;
 }
 void CVehicle::shutdown()
 {	
-	if( m_pMotorControllerSmall ) {
-		m_pMotorControllerSmall->shutdown();
-		delete m_pMotorControllerSmall;
-		m_pMotorControllerSmall = 0;
-	}
-	if( m_pMotorControllerLarge ) {
-		m_pMotorControllerLarge->shutdown();
-		delete m_pMotorControllerLarge;
-		m_pMotorControllerLarge = 0;
-	}
 	if( m_pSensorManager ) {
 		delete m_pSensorManager;
 		m_pSensorManager = 0;
 	}
-	if( m_pMotorControllerChannel ) {
-		m_pMotorControllerChannel->close();
-		delete m_pMotorControllerChannel;
-		m_pMotorControllerChannel = 0;
+	if( m_pMotionManager ) {
+		m_pMotionManager->shutdown();
+		delete m_pMotionManager;
+		m_pMotionManager = 0;
 	}
 	if( m_pI2cBus ) {
 		m_pI2cBus->close();
@@ -209,111 +147,21 @@ int CVehicle::start()
 	return errCode;
 }
 
-void CVehicle::showMotorControllerStatus()
-{
-	int errCode;
-	std::string version;
-	uint16_t motorStatus;
-	float temp1, temp2;
-	uint16_t motorConfig;
-	float mainVoltage;
-	float logicVoltage;
-	float mainMin, mainMax;
-	float logicMin, logicMax;
-	float current1, current2;
-	float duty1, duty2;
-	
-	if( (errCode = m_pMotorControllerLarge->getControllerInfo( version )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get controller info: %s\n", GetErrorString( errCode ) ); 
-	}
-	else
-		Terminal()->print( "Controller Version:\t%s\n", version.c_str() );
-	
-	if( (errCode = m_pMotorControllerLarge->getControllerStatus( &motorStatus )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor controller status: %s\n", GetErrorString( errCode ) );
-	}
-	else
-		Terminal()->print( "Controller Status:\t%04X\n", motorStatus );
-		
-	if( (errCode = m_pMotorControllerLarge->getTemperature( &temp1, &temp2 )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor controller temp: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Temperature 1:\t\t%.2f C\n", temp1 ); 
-		Terminal()->print( "Temperature 2:\t\t%.2f C\n", temp2 ); 
-	}
-
-	if( (errCode = m_pMotorControllerLarge->getConfigSettings( &motorConfig )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor controller config: %s\n", GetErrorString( errCode ) );
-	}
-	else
-		Terminal()->print( "Standard Config:\t%04X\n", motorConfig ); 
-		
-	if( (errCode = m_pMotorControllerLarge->getMainBatteryVoltage( &mainVoltage )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get main battery voltage: %s\n", GetErrorString( errCode ) );
-	}
-	else
-		Terminal()->print( "Battery Voltage:\t%.1f V\n", mainVoltage ); 
-		
-	if( (errCode = m_pMotorControllerLarge->getLogicBatteryVoltage( &logicVoltage )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get logic battery voltage: %s\n", GetErrorString( errCode ) );
-	}
-	else
-		Terminal()->print( "Logic Battery Voltage:\t%.1f V\n", logicVoltage ); 
-	
-	if( (errCode = m_pMotorControllerLarge->getMainVoltageLevels( &mainMin, &mainMax )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get main battery voltage levels: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Main Voltage Limits:\t%.1f V - %.1f V\n", mainMin, mainMax ); 
-	}
-		
-	if( (errCode = m_pMotorControllerLarge->getLogicVoltageLevels( &logicMin, &logicMax )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get logic battery voltage levels: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Logic Voltage Limits:\t%.1f V - %.1f V\n", logicMin, logicMax ); 
-	}
-		
-	if( (errCode = m_pMotorControllerLarge->getMotorCurrents( &current1, &current2 )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor currents: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Motor Current 1:\t%.3f A\n", current1 ); 
-		Terminal()->print( "Motor Current 2:\t%.3f A\n", current2 ); 
-	}
-	
-	if( (errCode = m_pMotorControllerLarge->getMotorDutyCycles( &duty1, &duty2 )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to get motor duty cycles: %s\n", GetErrorString( errCode ) );
-	}
-	else {
-		Terminal()->print( "Motor Duty Cycle 1:\t%.1f%%\n", duty1 ); 
-		Terminal()->print( "Motor Duty Cycle 2:\t%.1f%%\n", duty2 ); 
-	}
-}
-
 int CVehicle::update()
 {
 	std::chrono::steady_clock::time_point curtime = std::chrono::steady_clock::now();
 	int errCode;
 	
 	// Check comm threads for errors
-	errCode = m_pI2cBus->getThreadError();
+	/*errCode = m_pI2cBus->getThreadError();
 	if( errCode != ERR_OK ) {
 		Terminal()->printImportant( "ERROR: There was a failure in the %s thread\n", m_pI2cBus->getPortName().c_str() );
 		return errCode;
-	}
-	errCode = m_pMotorControllerChannel->getThreadError();
-	if( errCode != ERR_OK ) {
-		Terminal()->printImportant( "ERROR: There was a failure in the %s thread\n", m_pMotorControllerChannel->getPortName().c_str() );
-		return errCode;
-	}
+	}*/
 	
-	// Update motor if necessary
-	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1/MOTOR_UPDATE_FREQUENCY)*1000.0) )
-	{
-		// Do stuff...
-		
+	// Update motors if necessary
+	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1/MOTOR_UPDATE_FREQUENCY)*1000.0) ) {
+		m_pMotionManager->update();
 		m_lastMotorUpdate = curtime;
 	}
 	
@@ -384,7 +232,7 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 	else if( commandName.compare( "mocstatus" ) == 0 )
 	{
 		Terminal()->printImportant( "\nMotor Controller Status:\n" );
-		this->showMotorControllerStatus();
+		m_pMotionManager->printMotorStatus();
 		Terminal()->printImportant( "\n" );
 	}
 	else if( commandName.compare( "forward1" ) == 0 || commandName.compare( "reverse1" ) == 0  || 
@@ -404,25 +252,25 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 					speed = 127;
 				if( commandName.compare( "forward1" ) == 0 || commandName.compare( "forward" ) == 0 ) {
 					Terminal()->print( "Driving motor 1 forward at %d speed...\n", speed );
-					if( (errCode = this->m_pMotorControllerLarge->forward( RoboClawChannels::CHANNEL1, (int8_t)speed )) != ERR_OK ) {
+					if( (errCode = this->m_pMotionManager->getPropController()->forward( RoboClawChannels::CHANNEL1, (int8_t)speed )) != ERR_OK ) {
 						Terminal()->printImportant( "Failed to drive motor 1 forward: %s\n", GetErrorString( errCode ) );
 					}
 				}
 				if( commandName.compare( "reverse1" ) == 0 || commandName.compare( "reverse" ) == 0 ) {
 					Terminal()->print( "Driving motor 1 in reverse at %d speed...\n", speed );
-					if( (errCode = this->m_pMotorControllerLarge->reverse( RoboClawChannels::CHANNEL1, (int8_t)speed )) != ERR_OK ) {
+					if( (errCode = this->m_pMotionManager->getPropController()->reverse( RoboClawChannels::CHANNEL1, (int8_t)speed )) != ERR_OK ) {
 						Terminal()->printImportant( "Failed to drive motor 1 in reverse: %s\n", GetErrorString( errCode ) );
 					}
 				}
 				if( commandName.compare( "forward2" ) == 0 || commandName.compare( "forward" ) == 0 ) {
 					Terminal()->print( "Driving motor 2 forward at %d speed...\n", speed );
-					if( (errCode = this->m_pMotorControllerLarge->forward( RoboClawChannels::CHANNEL2, (int8_t)speed )) != ERR_OK ) {
+					if( (errCode = this->m_pMotionManager->getDoorController()->forward( RoboClawChannels::CHANNEL2, (int8_t)speed )) != ERR_OK ) {
 						Terminal()->printImportant( "Failed to drive motor 2 forward: %s\n", GetErrorString( errCode ) );
 					}
 				}
 				if( commandName.compare( "reverse2" ) == 0 || commandName.compare( "reverse" ) == 0 ) {
 					Terminal()->print( "Driving motor 2 in reverse at %d speed...\n", speed );
-					if( (errCode = this->m_pMotorControllerLarge->reverse( RoboClawChannels::CHANNEL2, (int8_t)speed )) != ERR_OK ) {
+					if( (errCode = this->m_pMotionManager->getDoorController()->reverse( RoboClawChannels::CHANNEL2, (int8_t)speed )) != ERR_OK ) {
 						Terminal()->printImportant( "Failed to drive motor 2 in reverse: %s\n", GetErrorString( errCode ) );
 					}
 				}

@@ -7,6 +7,7 @@
 #include "def.h"
 #include "motor.h"
 #include "wire_protocols.h"
+#include "vehicle.h"
 
 uint16_t roboclaw_crc16( const std::vector<unsigned char> &buffer )
 {
@@ -495,8 +496,211 @@ int CMotorController::reverse( RoboClawChannels channelId, int8_t speed )
 // CMotionManager //
 ////////////////////
 
-CMotionManager::CMotionManager()
+CMotionManager::CMotionManager( std::string uartChannel ) : m_uartChannelName( uartChannel )
 {
+	m_pControllerChannel = 0;
 }
 CMotionManager::~CMotionManager() {
+}
+
+int CMotionManager::initialize()
+{
+	int errCode;
+	
+	// Set uart commm channel
+	Terminal()->startItem( "Setting up motor UART" );
+	
+	m_pControllerChannel = new CUARTChannel( "MotorUART" );
+	errCode = m_pControllerChannel->open( "/dev/serial0", true, false, false, false );
+	if( errCode != ERR_OK ) {
+		Terminal()->finishItem( false );
+		return errCode;
+	}
+	
+	Terminal()->finishItem( true );
+	
+	// Setup motor controllers
+	// Prop controller
+	m_pMotorControllerProps = new CMotorController( m_pControllerChannel, ROBOCLAW_PROPS_ADDRESS );
+	Terminal()->startItem( "Propeller motor controller initialization" );
+	errCode = m_pMotorControllerProps->init();
+	if( errCode != ERR_OK ) {
+		Terminal()->finishItem( false );
+		return errCode;
+	}
+	Terminal()->finishItem( true );
+	
+	// Small controller
+	m_pMotorControllerDoor = new CMotorController( m_pControllerChannel, ROBOCLAW_DOORS_ADDRESS);
+	Terminal()->startItem( "Door motor controller initialization" );
+	errCode = m_pMotorControllerDoor->init();
+	if( errCode != ERR_OK ) {
+		Terminal()->finishItem( false );
+		return errCode;
+	}
+	Terminal()->finishItem( true );
+	
+	return ERR_OK;
+}
+void CMotionManager::shutdown()
+{
+	if( m_pMotorControllerDoor ) {
+		m_pMotorControllerDoor->shutdown();
+		delete m_pMotorControllerDoor;
+		m_pMotorControllerDoor = 0;
+	}
+	if( m_pMotorControllerProps ) {
+		m_pMotorControllerProps->shutdown();
+		delete m_pMotorControllerProps;
+		m_pMotorControllerProps = 0;
+	}
+	if( m_pControllerChannel ) {
+		m_pControllerChannel->close();
+		delete m_pControllerChannel;
+		m_pControllerChannel = 0;
+	}
+}
+
+int CMotionManager::start()
+{
+	int errCode;
+	
+	if( (errCode = m_pControllerChannel->setBaudRate( B460800 ) ) != ERR_OK )
+		return errCode; 
+	if( (errCode = m_pControllerChannel->setiFlag( IGNBRK ) ) != ERR_OK )
+		return errCode; 
+	if( (errCode = m_pControllerChannel->setoFlag( 0 ) ) != ERR_OK )
+		return errCode; 
+	if( (errCode = m_pControllerChannel->setReadTimeout( 0, 50 ) ) != ERR_OK )
+		return errCode; 
+		
+	// Set up motor controllers
+	Terminal()->startItem( "Configuring motors" );
+	errCode = this->setupMotors();
+	if( errCode != ERR_OK ) {
+		Terminal()->finishItem( false );
+		return errCode;
+	}
+	Terminal()->finishItem( true );
+	
+	return ERR_OK;
+}
+
+int CMotionManager::update()
+{
+	int errCode;
+	
+	errCode = m_pControllerChannel->getThreadError();
+	if( errCode != ERR_OK ) {
+		Terminal()->printImportant( "ERROR: There was a failure in the %s thread\n", m_pControllerChannel->getPortName().c_str() );
+		return errCode;
+	}
+	
+	return ERR_OK;
+}
+
+void CMotionManager::printMotorStatus()
+{
+	int errCode;
+	std::string version;
+	uint16_t motorStatus;
+	float temp1, temp2;
+	uint16_t motorConfig;
+	float mainVoltage;
+	float logicVoltage;
+	float mainMin, mainMax;
+	float logicMin, logicMax;
+	float current1, current2;
+	float duty1, duty2;
+	
+	if( (errCode = m_pMotorControllerProps->getControllerInfo( version )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get controller info: %s\n", GetErrorString( errCode ) ); 
+	}
+	else
+		Terminal()->print( "Controller Version:\t%s\n", version.c_str() );
+	
+	if( (errCode = m_pMotorControllerProps->getControllerStatus( &motorStatus )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor controller status: %s\n", GetErrorString( errCode ) );
+	}
+	else
+		Terminal()->print( "Controller Status:\t%04X\n", motorStatus );
+		
+	if( (errCode = m_pMotorControllerProps->getTemperature( &temp1, &temp2 )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor controller temp: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Temperature 1:\t\t%.2f C\n", temp1 ); 
+		Terminal()->print( "Temperature 2:\t\t%.2f C\n", temp2 ); 
+	}
+
+	if( (errCode = m_pMotorControllerProps->getConfigSettings( &motorConfig )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor controller config: %s\n", GetErrorString( errCode ) );
+	}
+	else
+		Terminal()->print( "Standard Config:\t%04X\n", motorConfig ); 
+		
+	if( (errCode = m_pMotorControllerProps->getMainBatteryVoltage( &mainVoltage )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get main battery voltage: %s\n", GetErrorString( errCode ) );
+	}
+	else
+		Terminal()->print( "Battery Voltage:\t%.1f V\n", mainVoltage ); 
+		
+	if( (errCode = m_pMotorControllerProps->getLogicBatteryVoltage( &logicVoltage )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get logic battery voltage: %s\n", GetErrorString( errCode ) );
+	}
+	else
+		Terminal()->print( "Logic Battery Voltage:\t%.1f V\n", logicVoltage ); 
+	
+	if( (errCode = m_pMotorControllerProps->getMainVoltageLevels( &mainMin, &mainMax )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get main battery voltage levels: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Main Voltage Limits:\t%.1f V - %.1f V\n", mainMin, mainMax ); 
+	}
+		
+	if( (errCode = m_pMotorControllerProps->getLogicVoltageLevels( &logicMin, &logicMax )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get logic battery voltage levels: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Logic Voltage Limits:\t%.1f V - %.1f V\n", logicMin, logicMax ); 
+	}
+		
+	if( (errCode = m_pMotorControllerProps->getMotorCurrents( &current1, &current2 )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor currents: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Motor Current 1:\t%.3f A\n", current1 ); 
+		Terminal()->print( "Motor Current 2:\t%.3f A\n", current2 ); 
+	}
+	
+	if( (errCode = m_pMotorControllerProps->getMotorDutyCycles( &duty1, &duty2 )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to get motor duty cycles: %s\n", GetErrorString( errCode ) );
+	}
+	else {
+		Terminal()->print( "Motor Duty Cycle 1:\t%.1f%%\n", duty1 ); 
+		Terminal()->print( "Motor Duty Cycle 2:\t%.1f%%\n", duty2 ); 
+	}
+}
+
+int CMotionManager::setupMotors()
+{
+	int errCode;
+	
+	if( (errCode = m_pMotorControllerProps->setLogicVoltageLevels( ROBOCLAW_LOGIC_MIN, ROBOCLAW_LOGIC_MAX )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to set logic level limits on prop controller\n" );
+		return errCode;
+	}
+	/*if( (errCode = m_pMotorControllerDoor->setMainVoltageLevels( ROBOCLAW_BATTERY_MIN, ROBOCLAW_BATTERY_MAX )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to set logic level limits on door controller\n" );
+		return errCode;
+	}*/
+	
+	return ERR_OK;
+}
+
+CMotorController* CMotionManager::getPropController() {
+	return m_pMotorControllerProps;
+}
+CMotorController* CMotionManager::getDoorController() {
+	return m_pMotorControllerDoor;
 }

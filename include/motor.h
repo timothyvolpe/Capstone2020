@@ -24,6 +24,21 @@
 /** The number of times to try contacting the controller again after no response */
 #define MOTOR_UART_TRIES 3
 
+/** Address of props 60A motor controller */
+#define ROBOCLAW_PROPS_ADDRESS 0x82
+/** Address of door 15A motor controller */
+#define ROBOCLAW_DOORS_ADDRESS 0x80
+
+/** Maximum allowable value of the 12 V batteries. */
+#define ROBOCLAW_BATTERY_MIN 11.5f
+/** Minimum allowable value of the 12 V batteries. */
+#define ROBOCLAW_BATTERY_MAX 15.0f
+
+/** Minimum allowable value of the logic battery. */
+#define ROBOCLAW_LOGIC_MIN 6.0f
+/** Maximum allowable value of the logic battery. */
+#define ROBOCLAW_LOGIC_MAX 15.0f
+
 enum RoboClawCommand : unsigned char
 {
 	MOTOR1_FORWARD			= 0,
@@ -375,7 +390,62 @@ public:
 */
 class CMotionManager
 {
+private:
+	std::string m_uartChannelName;
+	CUARTChannel *m_pControllerChannel;
+	
+	CMotorController *m_pMotorControllerProps;
+	CMotorController *m_pMotorControllerDoor;
+	
+	/**
+	* @brief Setup motor controllers
+	* @returns Returns #ERR_OK on success or appropriate error code on failure.
+	*/
+	int setupMotors();
 public:
-	CMotionManager();
+	CMotionManager( std::string uartChannel );
 	~CMotionManager();
+	
+	/**
+	* @brief Initializes the motion manager and creates all its assets
+	* @details This does not start communicating on the UART channel, and all attempts
+	* to communicate will fail until it is started.
+	* @returns Returns #ERR_OK if successfully initialized, or an appropriate error code if a failure occured.
+	*/
+	int initialize();
+	/**
+	* @brief Starts communication with the motor controllers
+	* @details This starts the communication and the motor controllers can now be used.
+	* @returns Returns #ERR_OK if successfully started communication threads, or appropriate error code if a failure occured.
+	*/
+	int start();
+	
+	/**
+	* @brief Updates the motor controllers and checks for errors in the threads
+	* @return Returns #ERR_OK if successfully updated, or appropriate error code if failure detected.
+	*/
+	int update();
+	
+	/**
+	* @brief Prints the motors status, used for debugging
+	*/
+	void printMotorStatus();
+	
+	/**
+	* @brief Stops communication thread and cleans up
+	*/
+	void shutdown();
+	
+	/**
+	* @brief Returns a pointer to the propeller motor controller
+	* @returns Pointer to the propeller motor controller
+	* @warning Will be null if motion manager has not been initialized
+	*/
+	CMotorController* getPropController();
+	/**
+	* @brief Returns a pointer to the door motor controller
+	* @returns Pointer to the door motor controller
+	* @warning Will be null if motion manager has not been initialized
+	*/
+	CMotorController* getDoorController();
 };
