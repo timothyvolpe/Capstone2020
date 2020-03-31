@@ -39,11 +39,15 @@ CSensorManager::~CSensorManager()
 
 int CSensorManager::initSensors()
 {
+	int errCode;
+	
 	// Initialize ultrasonic sensors
 	Terminal()->startItem( "Initializing ultrasonic sensors" );
 	for( unsigned int i = 0; i < ULTRASONIC_SENSOR_COUNT; i++ ) {
 		Terminal()->startItem( "Ultrasonic sensor %d", i+1 );
 		m_pUltrasonicSensors[i] = new CUltrasonicSensor();
+		if( (errCode = m_pUltrasonicSensors[i]->initialize()) != ERR_OK )
+			return errCode;
 		Terminal()->finishItem( true );
 	}
 	Terminal()->finishItem( true ); // Initializing ultrasonic sensors

@@ -96,6 +96,11 @@
 /** There was a syntax error in the config file. */
 #define ERR_CONFIG_SYNTAX				ERR_CONFIG_BASE + 0x2
 
+/** All ultrasonic sensor erors start at this value */
+#define ERR_ULTRASONIC_BASE				0x9000
+/** The ultrasonic sensor is not ready to take the next reading */
+#define ERR_ULTRASONIC_NOT_READY		ERR_ULTRASONIC_BASE + 0x1
+
 /**
 * @brief Combines error code and error message for lookup
 */
@@ -141,7 +146,9 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_MOTOR_VERSION_MISMATCH, "The motor controller version is not supported." },
 	
 	{ ERR_CONFIG_FILE, "Failed to read the config file." },
-	{ ERR_CONFIG_SYNTAX, "There was a syntax error in the config file." }
+	{ ERR_CONFIG_SYNTAX, "There was a syntax error in the config file." },
+	
+	{ ERR_ULTRASONIC_NOT_READY, "The ultrasonic sensor is not ready to take the next reading." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])
