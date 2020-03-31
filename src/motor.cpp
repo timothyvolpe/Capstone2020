@@ -9,6 +9,7 @@
 #include "motor.h"
 #include "wire_protocols.h"
 #include "vehicle.h"
+#include "config.h"
 
 uint16_t roboclaw_crc16( const std::vector<unsigned char> &buffer )
 {
@@ -73,6 +74,10 @@ int CMotorController::start()
 	// Attempt to read version
 	if( (errCode == this->getControllerInfo( controllerVersion )) != ERR_OK )
 		return errCode;
+	if( controllerVersion.empty() ) {
+		Terminal()->printImportant( "The device did not response with a version\n" );
+		return ERR_COMM_NO_RESPONSE;
+	}
 	m_controllerVersion = controllerVersion;
 	// Check version against required
 	try
@@ -688,8 +693,8 @@ int CMotionManager::initialize()
 	Terminal()->finishItem( true );
 	
 	// Create motor controllers
-	m_pMotorControllerProps = new CMotorController( m_pControllerChannel, ROBOCLAW_PROPS_ADDRESS );
-	m_pMotorControllerDoors = new CMotorController( m_pControllerChannel, ROBOCLAW_DOORS_ADDRESS);
+	m_pMotorControllerProps = new CMotorController( m_pControllerChannel, CVehicle::instance().getConfig()->getMotorPropAddress() );
+	m_pMotorControllerDoors = new CMotorController( m_pControllerChannel, CVehicle::instance().getConfig()->getMotorDoorAddress() );
 	
 	return ERR_OK;
 }
@@ -852,14 +857,31 @@ int CMotionManager::setupMotors()
 {
 	int errCode;
 	
-	if( (errCode = m_pMotorControllerProps->setLogicVoltageLevels( ROBOCLAW_LOGIC_MIN, ROBOCLAW_LOGIC_MAX )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to set logic level limits on prop controller\n" );
+	float mainMin, mainMax;
+	float logicMin, logicMax;
+	
+	mainMin = CVehicle::instance().getConfig()->getMotorMainBatVoltMin();
+	mainMax = CVehicle::instance().getConfig()->getMotorMainBatVoltMax();
+	logicMin = CVehicle::instance().getConfig()->getMotorLogicBatVoltMin();
+	logicMax = CVehicle::instance().getConfig()->getMotorLogicBatVoltMax();
+	
+	if( (errCode = m_pMotorControllerProps->setLogicVoltageLevels( logicMin, logicMax )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to set main battery voltage limits on prop controller\n" );
 		return errCode;
 	}
-	/*if( (errCode = m_pMotorControllerDoors->setMainVoltageLevels( ROBOCLAW_BATTERY_MIN, ROBOCLAW_BATTERY_MAX )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to set logic level limits on door controller\n" );
+	if( (errCode = m_pMotorControllerProps->setMainVoltageLevels( mainMin, mainMax )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to set logic voltage limits on prop controller\n" );
 		return errCode;
-	}*/
+	}
+	/*if( (errCode = m_pMotorControllerDoors->setMainVoltageLevels( logicMin, logicMax )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to set main battery voltage limits on door controller\n" );
+		return errCode;
+	}
+	if( (errCode = m_pMotorControllerDoors->setLogicVoltageLevels( mainMin, mainMax )) != ERR_OK ) {
+		Terminal()->printImportant( "Failed to set logic voltage limits on door controller\n" );
+		return errCode;
+	}
+	*/
 	
 	return ERR_OK;
 }

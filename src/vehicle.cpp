@@ -12,11 +12,15 @@
 #include "messages.h"
 #include "wire_protocols.h"
 #include "motor.h"
+#include "config.h"
 
-CVehicle::CVehicle() {
+CVehicle::CVehicle()
+{
 	m_pVehicleTerminal = 0;
 	m_pSensorManager = 0;
 	m_isRunning = false;
+	
+	m_pConfig = 0;
 
 	m_pI2cBus = 0;
 	m_pMotionManager = 0;
@@ -42,6 +46,15 @@ int CVehicle::initialize()
 	Terminal()->print( "Debug logging started\n" );
 	
 	Terminal()->printImportant( "Initializing vehicle...\n\n" );
+	
+	// Load config
+	Terminal()->startItem( "Loading config" );
+	m_pConfig = new CConfig();
+	if( (errCode = m_pConfig->load()) != ERR_OK ) {
+		Terminal()->finishItem( false );
+		return errCode;
+	}
+	Terminal()->finishItem( true );
 
 	// Open i2c comm bus
 	Terminal()->startItem( "Setting up I2C bus" );
@@ -103,6 +116,10 @@ void CVehicle::shutdown()
 		m_pVehicleTerminal->shutdown();
 		delete m_pVehicleTerminal;
 		m_pVehicleTerminal = 0;
+	}
+	if( m_pConfig ) {
+		delete m_pConfig;
+		m_pConfig = 0;
 	}
 }
 
@@ -295,4 +312,8 @@ void CVehicle::postMessage( std::unique_ptr<message_t> pMsg )
 CTerminal* CVehicle::getTerminal() {
 	assert( m_pVehicleTerminal );
 	return m_pVehicleTerminal;
+}
+CConfig* CVehicle::getConfig() {
+	assert( m_pConfig );
+	return m_pConfig;
 }

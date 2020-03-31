@@ -15,6 +15,7 @@
 class CSensorManager;
 class CI2CBus;
 class CMotionManager;
+class CConfig;
 
 struct message_t;
 
@@ -47,16 +48,19 @@ private:
 
 	std::mutex m_msgLoopMutex;
 	std::queue<std::unique_ptr<message_t>> m_messageQueue;
-
-	/** Parse a terminal command input from the user. */
-	void parseCommandMessage( std::unique_ptr<message_t> pCommandMsg );
+	
+	// Config
+	CConfig *m_pConfig;
 
 	// Communication lines
 	CI2CBus *m_pI2cBus;
 	
 	CMotionManager *m_pMotionManager;
-
 	std::chrono::steady_clock::time_point m_lastMotorUpdate;
+	
+	/** Parse a terminal command input from the user. */
+	void parseCommandMessage( std::unique_ptr<message_t> pCommandMsg );
+
 	
 	/**
 	* @brief Schedules and executes updates for all the children objects.
@@ -125,4 +129,10 @@ public:
 	* @returns Pointer to terminal class object.
 	*/
 	CTerminal* getTerminal();
+	
+	/**
+	* @brief Returns a pointer to the config class object.
+	* @returns Pointer to config class object.
+	*/
+	CConfig* getConfig();
 };

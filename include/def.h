@@ -85,9 +85,16 @@
 /** All motor controller errors start at this value. */
 #define ERR_MOTOR_BASE					0x7000
 /** Unexpected change in motor controller settings */
-#define ERR_MOTOR_VERIFY_FAILED				ERR_MOTOR_BASE + 0x1
+#define ERR_MOTOR_VERIFY_FAILED			ERR_MOTOR_BASE + 0x1
 /** The motor controller version is not supported */
-#define ERR_MOTOR_VERSION_MISMATCH			ERR_MOTOR_BASE + 0x2
+#define ERR_MOTOR_VERSION_MISMATCH		ERR_MOTOR_BASE + 0x2
+
+/** All config errors start at this value */
+#define ERR_CONFIG_BASE					0x8000
+/** Failed to read the config file. */
+#define ERR_CONFIG_FILE					ERR_CONFIG_BASE + 0x1
+/** There was a syntax error in the config file. */
+#define ERR_CONFIG_SYNTAX				ERR_CONFIG_BASE + 0x2
 
 /**
 * @brief Combines error code and error message for lookup
@@ -130,9 +137,11 @@ static const error_message_t ErrorMessageTable[] = {
 
 	{ ERR_UART_ALREADY_OPEN, "The COMM channel is already open." },
 	
-	{ ERR_MOTOR_VERIFY_FAILED, "Unexpected change in motor controller settings" },
+	{ ERR_MOTOR_VERIFY_FAILED, "Unexpected change in motor controller settings." },
+	{ ERR_MOTOR_VERSION_MISMATCH, "The motor controller version is not supported." },
 	
-	{ ERR_MOTOR_VERSION_MISMATCH, "The motor controller version is not supported" }
+	{ ERR_CONFIG_FILE, "Failed to read the config file." },
+	{ ERR_CONFIG_SYNTAX, "There was a syntax error in the config file." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])
