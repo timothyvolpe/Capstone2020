@@ -25,3 +25,10 @@ First release. This version is very rudimentary and possibly unstable. It provid
 - UART control of RoboClaw motor controllers
 - User control of 60A motor controller via terminal commands
 - Basic program architecture for further expansion
+
+### Version 0.2 Planned Changes
+These are planned changes
+- Improved motor controller handling
+- Added user editable config file
+- Add control of Ultrasonic Sensors
+- Add control of LIDAR Sensor
