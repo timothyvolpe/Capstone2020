@@ -1,3 +1,4 @@
+#include <thread>
 #include "ultrasonic.h"
 #include "def.h"
 
@@ -58,5 +59,10 @@ int CUltrasonicSensor::setAddress( uint8_t newAddress )
 	
 	// Check for response to ensure address changed successfully
 	
+	return ERR_OK;
+}
+
+int CUltrasonicSensor::pollAllAddress()
+{
 	return ERR_OK;
 }

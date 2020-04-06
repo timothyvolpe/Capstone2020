@@ -22,7 +22,6 @@ CVehicle::CVehicle()
 	
 	m_pConfig = 0;
 
-	m_pI2cBus = 0;
 	m_pMotionManager = 0;
 	
 	m_lastMotorUpdate = std::chrono::steady_clock::now(); 
@@ -51,16 +50,6 @@ int CVehicle::initialize()
 	Terminal()->startItem( "Loading config" );
 	m_pConfig = new CConfig();
 	if( (errCode = m_pConfig->load()) != ERR_OK ) {
-		Terminal()->finishItem( false );
-		return errCode;
-	}
-	Terminal()->finishItem( true );
-
-	// Open i2c comm bus
-	Terminal()->startItem( "Setting up I2C bus" );
-	m_pI2cBus = new CI2CBus( "SensorI2C" );
-	errCode = m_pI2cBus->open( "/dev/i2c-1" );
-	if( errCode != ERR_OK ) {
 		Terminal()->finishItem( false );
 		return errCode;
 	}
@@ -106,11 +95,6 @@ void CVehicle::shutdown()
 		m_pMotionManager->shutdown();
 		delete m_pMotionManager;
 		m_pMotionManager = 0;
-	}
-	if( m_pI2cBus ) {
-		m_pI2cBus->close();
-		delete m_pI2cBus;
-		m_pI2cBus = 0;
 	}
 	if( m_pVehicleTerminal ) {
 		m_pVehicleTerminal->shutdown();
@@ -169,16 +153,17 @@ int CVehicle::update()
 	std::chrono::steady_clock::time_point curtime = std::chrono::steady_clock::now();
 	int errCode;
 	
-	// Check comm threads for errors
-	/*errCode = m_pI2cBus->getThreadError();
-	if( errCode != ERR_OK ) {
-		Terminal()->printImportant( "ERROR: There was a failure in the %s thread\n", m_pI2cBus->getPortName().c_str() );
-		return errCode;
-	}*/
+	// Update sensors if necessary
+	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastSensorUpdate).count() > ((1/SENSOR_UPDATE_FREQUENCY)*1000.0) ) {
+		if( (errCode = m_pSensorManager->update()) != ERR_OK )
+			return errCode;
+		m_lastSensorUpdate = curtime;
+	}
 	
 	// Update motors if necessary
 	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1/MOTOR_UPDATE_FREQUENCY)*1000.0) ) {
-		m_pMotionManager->update();
+		if( (errCode = m_pMotionManager->update()) != ERR_OK )
+			return errCode;
 		m_lastMotorUpdate = curtime;
 	}
 	

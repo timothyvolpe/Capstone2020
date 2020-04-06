@@ -41,8 +41,10 @@ struct message_t;
 class CVehicle
 {
 private:
-	CSensorManager* m_pSensorManager;
 	CTerminal *m_pVehicleTerminal;
+
+	CSensorManager* m_pSensorManager;
+	std::chrono::steady_clock::time_point m_lastSensorUpdate;
 
 	bool m_isRunning;
 
@@ -51,9 +53,6 @@ private:
 	
 	// Config
 	CConfig *m_pConfig;
-
-	// Communication lines
-	CI2CBus *m_pI2cBus;
 	
 	CMotionManager *m_pMotionManager;
 	std::chrono::steady_clock::time_point m_lastMotorUpdate;

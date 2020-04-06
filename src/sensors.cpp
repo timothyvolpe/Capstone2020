@@ -6,10 +6,13 @@
 #include "lidar.h"
 #include "kinetics.h"
 #include "def.h"
+#include "wire_protocols.h"
 
 CSensorManager::CSensorManager()
 {
-	std::memset( &m_pUltrasonicSensors, 0, sizeof( CUltrasonicSensor )*ULTRASONIC_SENSOR_COUNT );
+	m_pI2cBus = 0;
+	
+	std::memset( &m_pUltrasonicSensors[0], 0, sizeof( CUltrasonicSensor* )*ULTRASONIC_SENSOR_COUNT );
 	m_pLIDARSensor = 0;
 	m_pInertialMotionSensors = 0;
 	m_pGPS = 0;
@@ -35,17 +38,33 @@ CSensorManager::~CSensorManager()
 		delete m_pGPS;
 		m_pGPS = 0;
 	}
+	if( m_pI2cBus ) {
+		m_pI2cBus->close();
+		delete m_pI2cBus;
+		m_pI2cBus = 0;
+	}
 }
 
 int CSensorManager::initSensors()
 {
 	int errCode;
 	
+	// Open i2c comm bus
+	Terminal()->startItem( "Setting up I2C bus" );
+	m_pI2cBus = new CI2CBus( "SensorI2C" );
+	errCode = m_pI2cBus->open( "/dev/i2c-1" );
+	if( errCode != ERR_OK ) {
+		Terminal()->finishItem( false );
+		return errCode;
+	}
+	Terminal()->finishItem( true );
+	
 	// Initialize ultrasonic sensors
 	Terminal()->startItem( "Initializing ultrasonic sensors" );
-	for( unsigned int i = 0; i < ULTRASONIC_SENSOR_COUNT; i++ ) {
+	for( unsigned int i = 0; i < ULTRASONIC_SENSOR_COUNT; i++ )
+	{
 		Terminal()->startItem( "Ultrasonic sensor %d", i+1 );
-		m_pUltrasonicSensors[i] = new CUltrasonicSensor();
+		m_pUltrasonicSensors[i] = new CUltrasonicSensor( m_pI2cBus, ULTRASONIC_DEFAULT_ADDRESS );	
 		if( (errCode = m_pUltrasonicSensors[i]->initialize()) != ERR_OK )
 			return errCode;
 		Terminal()->finishItem( true );
@@ -72,4 +91,18 @@ int CSensorManager::initSensors()
 
 void CSensorManager::startSensors()
 {
+}
+
+int CSensorManager::update()
+{
+	int errCode;
+	
+	// Check comm threads for errors
+	errCode = m_pI2cBus->getThreadError();
+	if( errCode != ERR_OK ) {
+		Terminal()->printImportant( "ERROR: There was a failure in the %s thread\n", m_pI2cBus->getPortName().c_str() );
+		return errCode;
+	}
+	
+	return ERR_OK;
 }

@@ -42,6 +42,15 @@ private:
 	unsigned char m_sensorAddress;
 	
 	std::chrono::steady_clock::time_point m_lastReadingTaken;
+	
+	/**
+	* @brief Polls every possible Ultrasonic sensor address. Used for debugging
+	* @details This checks each address one at a time. This will take a few seconds, and is blocking.
+	* Only use for debugging.
+	* @returns Returns #ERR_OK on success, or an appropriate error code if there was a failure. If no sensors were found but there were no comm errors, #ERR_OK is still returned.
+	* @warning Only use for debugging
+	*/
+	int pollAllAddress();
 public:
 	/** Default constructor */
 	CUltrasonicSensor( CI2CBus *pI2CBus, unsigned char address );

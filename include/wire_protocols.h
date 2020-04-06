@@ -38,16 +38,16 @@ class CWireProtocol
 {
 private:
 	std::string m_portName;
-
-	int m_hPortHandle;
-	termios m_portOptions;
 	
 	std::thread m_thread;
-	std::atomic<int> m_threadError;
-	std::atomic<bool> m_threadRunning;
 	
-	void threadMain();
+	void threadMainHeader();
 protected:
+	int m_hPortHandle;
+	
+	std::atomic<int> m_threadError;	
+	std::atomic<bool> m_threadRunning;
+
 	typedef std::queue<std::vector<unsigned char>> WriteQueue;
 	
 	std::mutex m_flushMutex;
@@ -58,10 +58,14 @@ protected:
 	std::queue<unsigned char> m_readBuffer;
 	
 	/**
-	* @brief Takes the attribute changes stored in this class and flushes them to the port.
-	* @warning This flushes the read and write buffers of the serial port.
+	* @brief Start the comm thread
 	*/
-	bool flushAttributes();
+	void startThread();
+	
+	/**
+	* @brief Attempt to stop the comm thread
+	*/
+	void stopThread();
 	
 	/**
 	* @brief Open the data port.
@@ -71,15 +75,9 @@ protected:
 	* @returns Returns #ERR_OK if successful, or appropriate erro code if a failure occured.
 	*/
 	int openPort( std::string channelPath, int flags );
-	
-	/**
-	* @brief Start the comm thread
-	*/
-	void startThread();
-	/**
-	* @brief Attempt to stop the comm thread
-	*/
-	void stopThread();
+
+	virtual void threadMain() = 0;
+	virtual void preStopThread() = 0;
 public:
 	CWireProtocol( std::string portName );
 	~CWireProtocol();
@@ -90,7 +88,7 @@ public:
 	* @param[in]	buffer	Data to be added to the write buffer.
 	* @returns Returns true if successfully added to queue, false if channel was not open.
 	*/
-	bool write( std::vector<unsigned char> buffer );
+	virtual bool write( std::vector<unsigned char> buffer ) = 0;
 
 	/**
 	* @brief Reads a certain number of bytes from the read buffer.
@@ -100,20 +98,145 @@ public:
 	* @param[in]	count	The maximum number of bytes to be read. Pass 0 to read all bytes.
 	* @returns A buffer containing up to count number of bytes, however an empty buffer may be returned if no bytes were available.
 	*/
-	std::vector<unsigned char> read( size_t count );
+	virtual std::vector<unsigned char> read( size_t count ) = 0;
 	
 	/**
 	* @brief Flushes the input and output, clears buffers.
 	* @returns Returns #ERR_OK if successfully flushed the channel, or an appropriate error code if a failure occured.
 	*/
-	int flush();
+	virtual int flush() = 0;
 	
 	/**
 	* @brief Checks if there is data available in the read buffer.
 	* @returns True if there is data, false if the buffer is empty.
 	*/
-	bool dataAvailable();
+	virtual bool dataAvailable() = 0;
+	
+	/**
+	* @brief Returns true if a channel is open.
+	* @details If the channel is open, but the comm thread is not running, this will still return true.
+	* @returns True if the channel is open.
+	*/
+	virtual bool isOpen() = 0;
+	
+	/**
+	* @brief Returns true if the comm thread is still running
+	* @returns True if comm thread is running.
+	*/
+	bool isRunning();
+	
+	/**
+	* @brief Gets the arbitrary port name for debug purposes
+	* @returns The name of the port
+	*/
+	std::string getPortName();
+	
+	/**
+	* @brief Gets current thread error code
+	* @returns Thread error code, which will be #ERR_OK if no error occured.
+	*/
+	const int getThreadError();
+};
 
+/**
+* @brief Handles an I2C bus.
+* @details This class can handle a single I2C bus with multiple devices connected to it.
+*
+* @author Timothy Volpe
+* @date 2/27/2020
+*/
+class CI2CBus : public CWireProtocol
+{
+protected:
+	void threadMain();
+	void preStopThread();
+public:
+	/* Default constructor */
+	CI2CBus( std::string portName );
+	/**
+	* @brief Default destructor. Closes bus handle.
+	* @details Although the destructor automatically closes the bus handle, it is good practice
+	*	to use the CI2CBus::close function.
+	*/
+	~CI2CBus();
+
+	/**
+	* @brief Opens a i2c bus with the given name
+	* @param[in]	busPath		A path to the i2c bus to open.
+	* @returns Returns #ERR_OK if successfully opened handle to i2c bus, or an appropriate error code if a failure occured.
+	*/
+	int open( std::string busPath );
+
+	/**
+	* @brief Close the i2c bus handle.
+	*/
+	void close();
+	
+	bool write( std::vector<unsigned char> buffer );
+	std::vector<unsigned char> read( size_t count );
+
+	int flush();
+	
+	bool dataAvailable();
+	
+	bool isOpen();
+};
+
+/**
+* @brief Handles a single UART channel.
+* @details This can handle one device connected to the UART channel.
+* 	The device will poll for UART events in a seperate thread, so that it is non-blocking.
+*
+* @author Timothy Volpe
+* @date 2/27/2020
+*/
+class CUARTChannel : public CWireProtocol
+{
+private:
+	termios m_portOptions;
+	
+	/**
+	* @brief Takes the attribute changes stored in this class and flushes them to the port.
+	* @warning This flushes the read and write buffers of the serial port.
+	*/
+	bool flushAttributes();
+protected:
+	void threadMain();
+	void preStopThread();
+public:
+	/* Default constructor */
+	CUARTChannel( std::string portName );
+	/**
+	* @brief Default destructor. Closes channel handle.
+	* @details Although the destructor automatically closes the channel handle, it is good practice
+	*	to use the CUARTChannel::close function.
+	*/
+	~CUARTChannel();
+
+	/**
+	* @brief Opens a UART channel with the given name
+	* @param[in]	channelPath		A path to the UART channel to open.
+	* @param[in]	enableReceiver	Enable the RX pin.
+	* @param[in]	twoStopBits		Use two stop bits instead of one.
+	* @param[in]	parity			Use parity error checking.
+	* @param[in]	rtscts			Use RTS/CTS.
+	* @returns Returns #ERR_OK if successfully opened handle to UART bus, or an appropriate error code if a failure occured.
+	*/
+	int open( std::string channelPath, bool enableReceiver, bool twoStopBits, bool parity, bool rtscts );
+	/**
+	* @brief Close the UART channel handle.
+	*/
+	void close();
+	
+	bool write( std::vector<unsigned char> buffer );
+	std::vector<unsigned char> read( size_t count );
+
+	int flush();
+	
+	bool dataAvailable();
+	
+	bool isOpen();
+	
 	/**
 	* @brief Sets the baud rate of the port.
 	* @details Sets the speed to the input and output lines. This will flush the channel first.
@@ -174,98 +297,4 @@ public:
 	* @returns The attribute cflag.
 	*/
 	tcflag_t getcFlag();
-	
-	/**
-	* @brief Returns true if a channel is open.
-	* @details If the channel is open, but the comm thread is not running, this will still return true.
-	* @returns True if the channel is open.
-	*/
-	bool isOpen();
-	
-	/**
-	* @brief Returns true if the comm thread is still running
-	* @returns True if comm thread is running.
-	*/
-	bool isRunning();
-	
-	/**
-	* @brief Gets the arbitrary port name for debug purposes
-	* @returns The name of the port
-	*/
-	std::string getPortName();
-	
-	/**
-	* @brief Gets current thread error code
-	* @returns Thread error code, which will be #ERR_OK if no error occured.
-	*/
-	const int getThreadError();
-};
-
-/**
-* @brief Handles an I2C bus.
-* @details This class can handle a single I2C bus with multiple devices connected to it.
-*
-* @author Timothy Volpe
-* @date 2/27/2020
-*/
-class CI2CBus : public CWireProtocol
-{
-public:
-	/* Default constructor */
-	CI2CBus( std::string portName );
-	/**
-	* @brief Default destructor. Closes bus handle.
-	* @details Although the destructor automatically closes the bus handle, it is good practice
-	*	to use the CI2CBus::close function.
-	*/
-	~CI2CBus();
-
-	/**
-	* @brief Opens a i2c bus with the given name
-	* @param[in]	busPath		A path to the i2c bus to open.
-	* @returns Returns #ERR_OK if successfully opened handle to i2c bus, or an appropriate error code if a failure occured.
-	*/
-	int open( std::string busPath );
-
-	/**
-	* @brief Close the i2c bus handle.
-	*/
-	void close();
-};
-
-
-/**
-* @brief Handles a single UART channel.
-* @details This can handle one device connected to the UART channel.
-* 	The device will poll for UART events in a seperate thread, so that it is non-blocking.
-*
-* @author Timothy Volpe
-* @date 2/27/2020
-*/
-class CUARTChannel : public CWireProtocol
-{
-public:
-	/* Default constructor */
-	CUARTChannel( std::string portName );
-	/**
-	* @brief Default destructor. Closes channel handle.
-	* @details Although the destructor automatically closes the channel handle, it is good practice
-	*	to use the CUARTChannel::close function.
-	*/
-	~CUARTChannel();
-
-	/**
-	* @brief Opens a UART channel with the given name
-	* @param[in]	channelPath		A path to the UART channel to open.
-	* @param[in]	enableReceiver	Enable the RX pin.
-	* @param[in]	twoStopBits		Use two stop bits instead of one.
-	* @param[in]	parity			Use parity error checking.
-	* @param[in]	rtscts			Use RTS/CTS.
-	* @returns Returns #ERR_OK if successfully opened handle to UART bus, or an appropriate error code if a failure occured.
-	*/
-	int open( std::string channelPath, bool enableReceiver, bool twoStopBits, bool parity, bool rtscts );
-	/**
-	* @brief Close the UART channel handle.
-	*/
-	void close();
 };
