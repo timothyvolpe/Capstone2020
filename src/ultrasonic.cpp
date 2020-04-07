@@ -1,6 +1,7 @@
 #include <thread>
 #include "ultrasonic.h"
 #include "def.h"
+#include "wire_protocols.h"
 
 CUltrasonicSensor::CUltrasonicSensor( CI2CBus *pI2CBus, unsigned char address ) {
 	m_sensorAddress = address;
@@ -14,8 +15,6 @@ int CUltrasonicSensor::initialize()
 	// Check that a device exists at the other end by taking a reading
 	this->takeReading();
 	
-	
-	
 	return ERR_OK;
 }
 
@@ -28,6 +27,8 @@ int CUltrasonicSensor::takeReading()
 	// Check status pin to make sure device is ready
 	
 	// Send command to take reading
+	if( !m_pI2CBus->write_i2c_byte( m_sensorAddress, ULTRASONIC_COMMAND_RANGE ) )
+		return ERR_ULTRASONIC_RANGE;
 	
 	// Save time point
 	m_lastReadingTaken = std::chrono::steady_clock::now();

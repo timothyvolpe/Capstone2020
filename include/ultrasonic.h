@@ -8,6 +8,17 @@
 /** The second part of the address unlock command. */
 #define ULTRASONIC_ADDR_UNLOCK_2 165
 
+/** Command to take a range reading. */
+#define ULTRASONIC_COMMAND_RANGE 81
+/** Command to report last range reading. */
+#define ULTRASONIC_COMMAND_READ 255
+/** Command to change the sensor address */
+#define ULTRASONIC_COMMAND_CHANGE_ADDRESS 224
+/** The first part of the address unlock command. */
+#define ULTRASONIC_COMMAND_ADDR_UNLOCK_1 170
+/** The second part of the address unlock command. */
+#define ULTRASONIC_COMMAND_ADDR_UNLOCK_2 165
+
 /** The minimum wait time between taking a reading and getting the value, per datasheet (ms) */
 #define ULTRASONIC_READ_TIME_MS 80
 /** The minimum time between consecutive readings, per datasheet (ms) */

@@ -24,8 +24,11 @@ bool CConfig::extractSettings( boost::property_tree::ptree &pt, std::string path
 	// Get config settings
 	// This is where defaults are defined as well
 	
-	m_uiMotorPropAddress = (unsigned char)this->getSetting<int>( pt, "motors.props_address", 0x82 );
-	m_uiMotorDoorAddress = (unsigned char)this->getSetting<int>( pt, "motors.doors_address", 0x80 );
+	m_bIgnoreMotorProp = this->getSetting<bool>( pt, "motors.ignore_prop_controller", false );
+	m_bIgnoreMotorDoor = this->getSetting<bool>( pt, "motors.ignore_door_controller", false );
+	
+	m_uiMotorPropAddress = (uint8_t)this->getSetting<unsigned int>( pt, "motors.props_address", 0x82 );
+	m_uiMotorDoorAddress = (uint8_t)this->getSetting<unsigned int>( pt, "motors.doors_address", 0x80 );
 	
 	m_fMotorMainBatVoltMin = this->getSetting<float>( pt, "motors.main_battery_voltage_min", 11.5f );
 	m_fMotorMainBatVoltMax = this->getSetting<float>( pt, "motors.main_battery_voltage_max", 15.0f );
@@ -39,6 +42,11 @@ bool CConfig::extractSettings( boost::property_tree::ptree &pt, std::string path
 	m_fMotorPropMaxCurrent2 = this->getSetting<float>( pt, "motors.max_prop_current2", 50 ); // A, max motor current
 	m_fMotorDoorMaxCurrent1 = this->getSetting<float>( pt, "motors.max_door_current1", 15 ); // A, max controller
 	m_fMotorDoorMaxCurrent2 = this->getSetting<float>( pt, "motors.max_door_current1", 15 ); // A, max controller
+	
+	m_uiUltrasonicFLAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.front_left_address", 224 );
+	m_uiUltrasonicFRAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.front_right_address", 224 );
+	m_uiUltrasonicBLAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.back_left_address", 224 );
+	m_uiUltrasonicBRAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.back_right_address", 224 );
 	
 	// Attempt to create and write
 	std::ofstream createFile( path );

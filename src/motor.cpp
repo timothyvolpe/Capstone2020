@@ -76,7 +76,7 @@ int CMotorController::start()
 		return errCode;
 	if( controllerVersion.empty() ) {
 		Terminal()->printImportant( "The device did not response with a version\n" );
-		return ERR_COMM_NO_RESPONSE;
+		return ERR_UART_NO_RESPONSE;
 	}
 	m_controllerVersion = controllerVersion;
 	// Check version against required
@@ -159,7 +159,7 @@ int CMotorController::sendCommandARBBlocking( unsigned char command, const std::
 		if( errCode != ERR_OK )
 			return errCode;
 		if( !m_pMotorUARTReference->write( this->serializePacket( packet ) ) )
-			return ERR_COMM_WRITE;
+			return ERR_UART_WRITE;
 		
 		// Wait up to 10 ms for data, or until responseLength is reached
 		std::chrono::steady_clock::time_point writeTime = std::chrono::steady_clock::now();
@@ -191,9 +191,9 @@ int CMotorController::sendCommandARBBlocking( unsigned char command, const std::
 	
 	// Validate reponse
 	if( response.empty() )
-		return ERR_COMM_NO_RESPONSE;
+		return ERR_UART_NO_RESPONSE;
 	if( !this->verifyResponse( command, response ) )
-		return ERR_COMM_INVALID_RESPONSE;
+		return ERR_UART_INVALID_RESPONSE;
 	
 	return ERR_OK;
 }
@@ -720,6 +720,8 @@ void CMotionManager::shutdown()
 int CMotionManager::start()
 {
 	int errCode;
+	bool ignoreProps = CVehicle::instance().getConfig()->shouldIgnorePropController();
+	bool ignoreDoors = CVehicle::instance().getConfig()->shouldIgnoreDoorController();
 	
 	// Setup UART for communication
 	if( (errCode = m_pControllerChannel->setBaudRate( B460800 ) ) != ERR_OK )
@@ -733,36 +735,50 @@ int CMotionManager::start()
 		
 	// Setup motor controllers
 	// Prop controller
-	Terminal()->startItem( "Propeller motor controller starting" );
-	errCode = m_pMotorControllerProps->start();
-	if( errCode != ERR_OK ) {
-		Terminal()->finishItem( false );
-		return errCode;
+	if( !ignoreProps )
+	{
+		Terminal()->startItem( "Propeller motor controller starting" );
+		errCode = m_pMotorControllerProps->start();
+		if( errCode != ERR_OK ) {
+			Terminal()->finishItem( false );
+			return errCode;
+		}
+		
+		m_verifyQueue.push( m_pMotorControllerProps );
+		
+		if( (errCode = m_pMotorControllerProps->downloadControllerSettings( false, false ) ) != ERR_OK ) {
+			Terminal()->printImportant( "There was a failure downloading the prop controller settings\n" );
+			Terminal()->finishItem( false );
+			return errCode;
+		}
+		
+		Terminal()->finishItem( true );
 	}
-	Terminal()->finishItem( true );
+	else
+		Terminal()->print( "WARNING: Ignoring prop motor controller, should only be used for testing!\n" );
 	
 	// Small controller
-	/*Terminal()->startItem( "Door motor controller starting" );
-	errCode = m_pMotorControllerDoors->start();
-	if( errCode != ERR_OK ) {
-		Terminal()->finishItem( false );
-		return errCode;
-	}
-	Terminal()->finishItem( true );*/
+	if( !ignoreDoors )
+	{
+		Terminal()->startItem( "Door motor controller starting" );
+		errCode = m_pMotorControllerDoors->start();
+		if( errCode != ERR_OK ) {
+			Terminal()->finishItem( false );
+			return errCode;
+		}
 	
-	// Add to verification queue
-	m_verifyQueue.push( m_pMotorControllerProps );
-	//m_verifyQueue.push( m_pMotorControllerDoors );
+		m_verifyQueue.push( m_pMotorControllerDoors );
 		
-	// Download settings
-	if( (errCode = m_pMotorControllerProps->downloadControllerSettings( false, false ) ) != ERR_OK ) {
-		Terminal()->printImportant( "There was a failure downloading the prop controller settings\n" );
-		return errCode;
+		if( (errCode = m_pMotorControllerDoors->downloadControllerSettings( false, false ) ) != ERR_OK ) {
+			Terminal()->printImportant( "There was a failure downloading the door controller settings\n" );
+			Terminal()->finishItem( false );
+			return errCode;
+		}
+		
+		Terminal()->finishItem( true );
 	}
-	/*if( (errCode = m_pMotorControllerDoors->downloadControllerSettings( false ) ) != ERR_OK ) {
-		Terminal()->printImportant( "There was a failure downloading the door controller settings\n" );
-		return errCode;
-	}*/
+	else
+		Terminal()->print( "WARNING: Ignoring door motor controller, should only be used for testing!\n" );
 		
 	// Set up motor controllers
 	Terminal()->startItem( "Configuring motors" );
@@ -791,15 +807,15 @@ int CMotionManager::update()
 	// Periodically verify motor a controller's settings in order of queue
 	if( std::chrono::duration_cast<std::chrono::seconds>(curtime - m_lastVerification).count() > MOTOR_VERIFY_FREQUENCY_S )
 	{
-		assert( m_verifyQueue.size() > 0 );
-		
-		CMotorController *pVerifyController = m_verifyQueue.front();
-		m_verifyQueue.pop();
-		m_verifyQueue.push( pVerifyController ); // move to back
-		
-		if( (errCode = pVerifyController->downloadControllerSettings( true, true ) ) != ERR_OK )
-			return errCode;
-		
+		if( m_verifyQueue.size() > 0 )
+		{
+			CMotorController *pVerifyController = m_verifyQueue.front();
+			m_verifyQueue.pop();
+			m_verifyQueue.push( pVerifyController ); // move to back
+			
+			if( (errCode = pVerifyController->downloadControllerSettings( true, true ) ) != ERR_OK )
+				return errCode;
+		}
 		m_lastVerification = curtime;
 	}
 	
@@ -856,6 +872,8 @@ void CMotionManager::printMotorStatus()
 int CMotionManager::setupMotors()
 {
 	int errCode;
+	bool ignoreProps = CVehicle::instance().getConfig()->shouldIgnorePropController();
+	bool ignoreDoors = CVehicle::instance().getConfig()->shouldIgnoreDoorController();
 	
 	float mainMin, mainMax;
 	float logicMin, logicMax;
@@ -865,30 +883,37 @@ int CMotionManager::setupMotors()
 	logicMin = CVehicle::instance().getConfig()->getMotorLogicBatVoltMin();
 	logicMax = CVehicle::instance().getConfig()->getMotorLogicBatVoltMax();
 	
-	if( (errCode = m_pMotorControllerProps->setLogicVoltageLevels( logicMin, logicMax )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to set main battery voltage limits on prop controller\n" );
-		return errCode;
+	if( !ignoreProps )
+	{
+		if( (errCode = m_pMotorControllerProps->setLogicVoltageLevels( logicMin, logicMax )) != ERR_OK ) {
+			Terminal()->printImportant( "Failed to set main battery voltage limits on prop controller\n" );
+			return errCode;
+		}
+		if( (errCode = m_pMotorControllerProps->setMainVoltageLevels( mainMin, mainMax )) != ERR_OK ) {
+			Terminal()->printImportant( "Failed to set logic voltage limits on prop controller\n" );
+			return errCode;
+		}
 	}
-	if( (errCode = m_pMotorControllerProps->setMainVoltageLevels( mainMin, mainMax )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to set logic voltage limits on prop controller\n" );
-		return errCode;
+	if( !ignoreDoors )
+	{
+		if( (errCode = m_pMotorControllerDoors->setMainVoltageLevels( logicMin, logicMax )) != ERR_OK ) {
+			Terminal()->printImportant( "Failed to set main battery voltage limits on door controller\n" );
+			return errCode;
+		}
+		if( (errCode = m_pMotorControllerDoors->setLogicVoltageLevels( mainMin, mainMax )) != ERR_OK ) {
+			Terminal()->printImportant( "Failed to set logic voltage limits on door controller\n" );
+			return errCode;
+		}
 	}
-	/*if( (errCode = m_pMotorControllerDoors->setMainVoltageLevels( logicMin, logicMax )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to set main battery voltage limits on door controller\n" );
-		return errCode;
-	}
-	if( (errCode = m_pMotorControllerDoors->setLogicVoltageLevels( mainMin, mainMax )) != ERR_OK ) {
-		Terminal()->printImportant( "Failed to set logic voltage limits on door controller\n" );
-		return errCode;
-	}
-	*/
 	
 	return ERR_OK;
 }
 
 CMotorController* CMotionManager::getPropController() {
+	assert( CVehicle::instance().getConfig()->shouldIgnorePropController() );
 	return m_pMotorControllerProps;
 }
 CMotorController* CMotionManager::getDoorController() {
+	assert( CVehicle::instance().getConfig()->shouldIgnoreDoorController() );
 	return m_pMotorControllerDoors;
 }

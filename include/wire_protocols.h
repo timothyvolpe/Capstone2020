@@ -40,22 +40,17 @@ private:
 	std::string m_portName;
 	
 	std::thread m_thread;
+	std::atomic<bool> m_threadRunning;
 	
-	void threadMainHeader();
+	void threadMain();
 protected:
 	int m_hPortHandle;
 	
-	std::atomic<int> m_threadError;	
-	std::atomic<bool> m_threadRunning;
-
-	typedef std::queue<std::vector<unsigned char>> WriteQueue;
+	std::atomic<int> m_threadError;
 	
 	std::mutex m_flushMutex;
 	std::mutex m_writeMutex;
 	std::mutex m_readMutex;
-	
-	WriteQueue m_writeBuffer;
-	std::queue<unsigned char> m_readBuffer;
 	
 	/**
 	* @brief Start the comm thread
@@ -76,12 +71,17 @@ protected:
 	*/
 	int openPort( std::string channelPath, int flags );
 
-	virtual void threadMain() = 0;
+	virtual void threadLoop() = 0;
+	
+	/**
+	* @brief Called before a thread is stopped by the main thread.
+	* @details If the thread is stopped by itself, this will not be called.
+	*/
 	virtual void preStopThread() = 0;
 public:
 	CWireProtocol( std::string portName );
 	~CWireProtocol();
-	
+
 	/**
 	* @brief Write to the UART channel.
 	* @details This will add buffer to the write buffer, to be sent as soon as the channel is avaliable.
@@ -89,7 +89,6 @@ public:
 	* @returns Returns true if successfully added to queue, false if channel was not open.
 	*/
 	virtual bool write( std::vector<unsigned char> buffer ) = 0;
-
 	/**
 	* @brief Reads a certain number of bytes from the read buffer.
 	* @details This will read count number of bytes from the read buffer and return them. If there are not count
@@ -147,8 +146,16 @@ public:
 */
 class CI2CBus : public CWireProtocol
 {
+private:
+	struct I2CPacket
+	{
+		unsigned char address;
+		std::vector<unsigned char> payload;
+	};
+	
+	std::queue<I2CPacket> m_writeBuffer;
 protected:
-	void threadMain();
+	void threadLoop();
 	void preStopThread();
 public:
 	/* Default constructor */
@@ -172,6 +179,26 @@ public:
 	*/
 	void close();
 	
+	/**
+	* @brief Writes an i2c packet to the bus.
+	* @details This method forms the packet automatically and sends it to the comm thread
+	* to be transmitted.
+	* @param[in]	address		The slave address to send the payload to.
+	* @param[in]	writeBit	If true, the write bit will be set to one. If false, it will be forced to 0.
+	* @param[in]	payload		The data payload to deliver to the slave at the specified address.
+	* @returns Returns true if successfully posted the message to the comm thread, false if otherwise.
+	*/
+	bool write_i2c( unsigned char address, bool writeBit, std::vector<unsigned char> payload );
+	
+	/**
+	* @brief Write a single byte to an i2c device
+	* @details This writes one device to an i2c device. Posts it to the comm thread for non-blocking write.
+	* @param[in]	address		The address to write to. The R/W bit will be set.
+	* @param[in]	data		The byte to write to the device.
+	* @returns Returns ture if successfully posted to the comm thread, false if otherwise.
+	*/
+	bool write_i2c_byte( unsigned char address, unsigned char data );
+	
 	bool write( std::vector<unsigned char> buffer );
 	std::vector<unsigned char> read( size_t count );
 
@@ -193,7 +220,12 @@ public:
 class CUARTChannel : public CWireProtocol
 {
 private:
+	typedef std::queue<std::vector<unsigned char>> WriteQueue;
+
 	termios m_portOptions;
+	
+	WriteQueue m_writeBuffer;
+	std::queue<unsigned char> m_readBuffer;
 	
 	/**
 	* @brief Takes the attribute changes stored in this class and flushes them to the port.
@@ -201,7 +233,7 @@ private:
 	*/
 	bool flushAttributes();
 protected:
-	void threadMain();
+	void threadLoop();
 	void preStopThread();
 public:
 	/* Default constructor */
@@ -228,6 +260,12 @@ public:
 	*/
 	void close();
 	
+	/**
+	* @brief Write to the UART channel.
+	* @details This will add buffer to the write buffer, to be sent as soon as the channel is avaliable.
+	* @param[in]	buffer	Data to be added to the write buffer.
+	* @returns Returns true if successfully added to queue, false if channel was not open.
+	*/
 	bool write( std::vector<unsigned char> buffer );
 	std::vector<unsigned char> read( size_t count );
 

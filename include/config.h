@@ -56,6 +56,9 @@ private:
 		}
 	}
 	
+	bool		m_bIgnoreMotorProp;
+	bool		m_bIgnoreMotorDoor;
+	
 	uint8_t		m_uiMotorPropAddress;
 	uint8_t		m_uiMotorDoorAddress;
 	
@@ -71,6 +74,11 @@ private:
 	float		m_fMotorPropMaxCurrent2;
 	float		m_fMotorDoorMaxCurrent1;
 	float		m_fMotorDoorMaxCurrent2;
+	
+	uint8_t		m_uiUltrasonicFLAddress;
+	uint8_t		m_uiUltrasonicFRAddress;
+	uint8_t		m_uiUltrasonicBLAddress;
+	uint8_t		m_uiUltrasonicBRAddress;
 public:
 	CConfig();
 	~CConfig();
@@ -84,6 +92,9 @@ public:
 	* @returns Returns #ERR_OK on success, or an appropriate error code on failure.
 	*/
 	int load();
+	
+	inline const bool shouldIgnorePropController() { return m_bIgnoreMotorProp; }
+	inline const bool shouldIgnoreDoorController() { return m_bIgnoreMotorDoor; }
 	
 	inline const uint8_t getMotorPropAddress() { return m_uiMotorPropAddress; }
 	inline const uint8_t getMotorDoorAddress() { return m_uiMotorDoorAddress; }
@@ -101,4 +112,9 @@ public:
 	inline const float getMotorPropMaxCurrent2() { return m_fMotorPropMaxCurrent2; }
 	inline const float getMotorDoorMaxCurrent1() { return m_fMotorDoorMaxCurrent1; }
 	inline const float getMotorDoorMaxCurrent2() { return m_fMotorDoorMaxCurrent2; }
+	
+	inline const uint8_t getUltrasonicFLAddress() { return m_uiUltrasonicFLAddress; }
+	inline const uint8_t getUltrasonicFRAddress() { return m_uiUltrasonicFRAddress; }
+	inline const uint8_t getUltrasonicBLAddress() { return m_uiUltrasonicBLAddress; }
+	inline const uint8_t getUltrasonicBRAddress() { return m_uiUltrasonicBRAddress; }
 };

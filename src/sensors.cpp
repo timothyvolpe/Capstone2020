@@ -7,6 +7,7 @@
 #include "kinetics.h"
 #include "def.h"
 #include "wire_protocols.h"
+#include "config.h"
 
 CSensorManager::CSensorManager()
 {
@@ -61,6 +62,12 @@ int CSensorManager::initSensors()
 	
 	// Initialize ultrasonic sensors
 	Terminal()->startItem( "Initializing ultrasonic sensors" );
+	uint8_t sensorAddress[] = {
+		CVehicle::instance().getConfig()->getUltrasonicFLAddress(),
+		CVehicle::instance().getConfig()->getUltrasonicFRAddress(),
+		CVehicle::instance().getConfig()->getUltrasonicBLAddress(),
+		CVehicle::instance().getConfig()->getUltrasonicBRAddress()
+	};
 	for( unsigned int i = 0; i < ULTRASONIC_SENSOR_COUNT; i++ )
 	{
 		Terminal()->startItem( "Ultrasonic sensor %d", i+1 );

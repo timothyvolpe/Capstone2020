@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <sys/ioctl.h>
+#include <linux/i2c.h>
 #endif
 #include <assert.h>
 #include <cstring>
@@ -21,12 +22,13 @@ CWireProtocol::~CWireProtocol()
 {
 }
 
-void CWireProtocol::threadMainHeader()
+void CWireProtocol::threadMain()
 {
 	DebugMessage( "%s THREAD ENTER\n", m_portName.c_str() );
 	
 	m_threadRunning = true;
-	this->threadMain();
+	while( m_threadRunning )
+		this->threadLoop();
 	
 	DebugMessage( "%s THREAD EXIT\n", m_portName.c_str() );
 }
@@ -67,6 +69,12 @@ void CWireProtocol::startThread()
 }
 void CWireProtocol::stopThread()
 {
+	// If it was called from the thread itself, just do this
+	if( std::this_thread::get_id() == m_thread.get_id() ) {
+		m_threadRunning = false;
+		return;
+	}
+	
 	this->preStopThread();
 	
 	// Stop thread
@@ -100,8 +108,53 @@ CI2CBus::~CI2CBus() {
 	this->close();
 }
 
-void CI2CBus::threadMain() {
+void CI2CBus::threadLoop()
+{
+	assert( this->isOpen() );
 	
+	if( !this->isRunning() )
+		return;
+		
+	try
+	{
+		CI2CBus::I2CPacket packet;
+		packet.address = 0;
+		
+		// Try to write an i2c command
+		std::unique_lock<std::mutex> lock( m_writeMutex );
+		if( !m_writeBuffer.empty() ) {
+			packet = m_writeBuffer.front();
+			m_writeBuffer.pop();
+		}
+		lock.unlock();
+		// If we have a packet to write
+		if( packet.address != 0 && packet.payload.size() > 0 )
+		{
+			// Form the buffer
+			i2c_msg message;
+			i2c_rdwr_ioctl_data i2cpayload;
+			
+			message.addr = packet.address;
+			message.buf = &packet.payload[0];
+			message.len = packet.payload.size();
+			
+			i2cpayload.msgs = &message;
+			i2cpayload.nmsgs = 1;
+			
+			if( ioctl( m_hPortHandle, I2C_RDWR, &i2cpayload ) == -1 ) {
+				Terminal()->printImportant( "ERRONO: %d\n", errno );
+				m_threadError = ERR_I2C_WRITE_TO_PORT;
+				this->stopThread();
+				return;
+			}
+		}
+	}
+	catch(const std::exception &e) {
+		Terminal()->printImportant( "Communication thread encountered an exception and had to stop: %s\n", e.what() );
+	}
+	catch(...) {
+		Terminal()->printImportant( "Communication thread encountered an unknown exception and had to stop.\n" );
+	}
 }
 void CI2CBus::preStopThread() {
 	
@@ -111,6 +164,7 @@ int CI2CBus::open( std::string busPath )
 {
 	int errCode;
 	tcflag_t cflag;
+	unsigned long i2cfuncs;
 	
 	if( this->isOpen() )
 		return ERR_I2C_ALREADY_OPEN;
@@ -118,6 +172,12 @@ int CI2CBus::open( std::string busPath )
 	// Open port
 	if( (errCode = this->openPort( busPath, O_RDWR | O_NOCTTY | O_NONBLOCK )) != ERR_OK )
 		return errCode;
+		
+	// Check for i2c support on channel
+	if( ioctl( m_hPortHandle, I2C_FUNCS, &i2cfuncs ) == -1 )
+		return ERR_I2C_NO_SUPPORT;
+    if( !(i2cfuncs & I2C_FUNC_I2C) )
+		return ERR_I2C_NO_SUPPORT;
 	
 	this->startThread();
 
@@ -128,10 +188,40 @@ void CI2CBus::close() {
 	this->stopThread();
 }
 
-bool CI2CBus::write( std::vector<unsigned char> buffer ) {
+bool CI2CBus::write_i2c( unsigned char address, bool writeBit, std::vector<unsigned char> payload )
+{
+	if( !this->isOpen() || !this->isRunning() ) 
+		return false;
+
+	// Form the packet
+	CI2CBus::I2CPacket packet;
+	packet.address = address;
+	if( writeBit )
+		packet.address |= 0x01;
+	else
+		packet.address &= 0xFE;
+	packet.payload = payload;
+
+	std::lock_guard<std::mutex> lock( m_writeMutex );
+	m_writeBuffer.push( packet );
+
 	return true;
 }
-std::vector<unsigned char> CI2CBus::read( size_t count ) {
+bool CI2CBus::write_i2c_byte( unsigned char address, unsigned char data ) {
+	std::vector<unsigned char> buffer(1);
+	buffer[0] = data;
+	return this->write_i2c( address, true, buffer );
+}
+
+bool CI2CBus::write( std::vector<unsigned char> buffer )
+{
+	assert( false ); // Don't use this for now
+	
+	return true;
+}
+
+std::vector<unsigned char> CI2CBus::read( size_t count )
+{	
 	return std::vector<unsigned char>();
 }
 
@@ -160,13 +250,16 @@ CUARTChannel::~CUARTChannel() {
 }
 
 
-void CUARTChannel::threadMain() {
+void CUARTChannel::threadLoop()
+{
 	int events;
 	pollfd fileDesc;
 	bool bytesAtPort, writeAvail;
 	
-	assert( m_hPortHandle != -1 );
-	assert( !m_threadRunning );
+	assert( this->isOpen() );
+	
+	if( !this->isRunning() )
+		return;
 	
 	
 	fileDesc.fd = m_hPortHandle;
@@ -177,126 +270,119 @@ void CUARTChannel::threadMain() {
 	writeAvail = false;
 	
 	try
-	{
-		m_threadRunning = true;
-		while( m_threadRunning )
-		{		
-			// Check for serial events
-			events = poll( &fileDesc, 1, 0 );
-			if( events == -1 )
+	{	
+		// Check for serial events
+		events = poll( &fileDesc, 1, 0 );
+		if( events == -1 )
+		{
+			if( errno == EFAULT || errno == EINVAL || errno == ENOMEM )
 			{
-				if( errno == EFAULT || errno == EINVAL || errno == ENOMEM )
-				{
-					// Fatal error
-					m_threadError = ERR_COMM_POLL;
-					m_threadRunning = false;
-					break;
-				}
+				// Fatal error
+				m_threadError = ERR_UART_POLL;
+				this->stopThread();
+				return;
 			}
-			if( events > 0 )
-			{
-				// Read some bytes
-				if( fileDesc.revents & POLLIN ) {
-					bytesAtPort = true;
-				}
-				// Write some bytes
-				if( fileDesc.revents & POLLOUT ) {
-					writeAvail = true;
-				}
-				// Error
-				if( fileDesc.revents & POLLERR ) {
-					m_threadError = ERR_COMM_POLL;
-					m_threadRunning = false;
-					break;
-				}
+		}
+		if( events > 0 )
+		{
+			// Read some bytes
+			if( fileDesc.revents & POLLIN )
+				bytesAtPort = true;
+			// Write some bytes
+			if( fileDesc.revents & POLLOUT )
+				writeAvail = true;
+			// Error
+			if( fileDesc.revents & POLLERR ) {
+				m_threadError = ERR_UART_POLL;
+				this->stopThread();
+				return;
 			}
-			else
-				continue; // Can't read or write, so do nothing
-				
-			if( bytesAtPort )
-			{
-				std::unique_lock<std::mutex> lock( m_flushMutex );
-				
-				// Check the number of bytes at the port
-				unsigned long byteCount;
-				if( ioctl( m_hPortHandle, FIONREAD, &byteCount ) == -1 ) {
-					m_threadError = ERR_COMM_READ;
-					m_threadRunning = false;
-					break;
-				}
+		}
 			
-				if( byteCount <= 0 )
-					bytesAtPort = false;
-				else
-				{
-					std::vector<unsigned char> buffer;
-					ssize_t actualBytesRead;
-					buffer.resize( byteCount );
-					actualBytesRead = ::read( m_hPortHandle, &buffer[0], byteCount );
-					if( actualBytesRead == -1 ) {
-						if( errno != EINTR ) {
-							m_threadError = ERR_COMM_READ;
-							m_threadRunning = false;
-							break;
-						}
-					}
-					else if( actualBytesRead > 0 ) {
-						buffer.resize( actualBytesRead );
-						for( auto it = buffer.begin(); it != buffer.end(); it++ )
-							m_readBuffer.push( (*it) );
-					}
-					if( byteCount - actualBytesRead <= 0 )
-						bytesAtPort = false;
-				}
-				
-				lock.unlock();
+		if( bytesAtPort )
+		{
+			std::unique_lock<std::mutex> lock( m_flushMutex );
+			
+			// Check the number of bytes at the port
+			unsigned long byteCount;
+			if( ioctl( m_hPortHandle, FIONREAD, &byteCount ) == -1 ) {
+				m_threadError = ERR_UART_READ;
+				this->stopThread();
+				return;
 			}
-			if( writeAvail )
+		
+			if( byteCount <= 0 )
+				bytesAtPort = false;
+			else
 			{
-				std::vector<unsigned char> buffer; 
-				
-				// Retrieve one entry from the buffer
-				std::unique_lock<std::mutex> lock2( m_writeMutex );
-				if( m_writeBuffer.size() > 0 ) {
-					buffer = m_writeBuffer.front();
-					m_writeBuffer.pop();
-				}
-				lock2.unlock();
-				
-				if( !buffer.empty() )
+				std::vector<unsigned char> buffer;
+				ssize_t actualBytesRead;
+				buffer.resize( byteCount );
+				actualBytesRead = ::read( m_hPortHandle, &buffer[0], byteCount );
+				if( actualBytesRead == -1 )
 				{
-					size_t bufferSize = buffer.size();
-					ssize_t bytesWritten = 0;
-					int attempts = 0;
-					
-					// Try to write all the bytes
-					std::unique_lock<std::mutex> lock( m_flushMutex );
-					do
-					{
-						ssize_t curBytesWritten;
-						curBytesWritten = ::write( m_hPortHandle, &buffer[0], buffer.size() );
-						if( curBytesWritten <= 0 )
-						{	
-							attempts++;
-							if( attempts >= UART_WRITE_ATTEMPS )
-								break;
-							if( errno != EINTR | errno != EAGAIN ) {
-								m_threadError = ERR_COMM_READ;
-								m_threadRunning = false;
-								break;
-							}
-						}
-						else {
-							
-							bytesWritten += curBytesWritten;
-							if( bytesWritten < bufferSize )
-								std::this_thread::sleep_for( std::chrono::milliseconds(UART_WRITE_WAIT_MS) ); 
-						}
-					} while( bytesWritten < bufferSize );
-					lock.unlock();
-					
-					writeAvail = false;
+					if( errno != EINTR ) {
+						m_threadError = ERR_UART_READ;
+						this->stopThread();
+						return;
+					}
 				}
+				else if( actualBytesRead > 0 ) {
+					buffer.resize( actualBytesRead );
+					for( auto it = buffer.begin(); it != buffer.end(); it++ )
+						m_readBuffer.push( (*it) );
+				}
+				if( byteCount - actualBytesRead <= 0 )
+					bytesAtPort = false;
+			}
+			
+			lock.unlock();
+		}
+		if( writeAvail )
+		{
+			std::vector<unsigned char> buffer; 
+			
+			// Retrieve one entry from the buffer
+			std::unique_lock<std::mutex> lock2( m_writeMutex );
+			if( m_writeBuffer.size() > 0 ) {
+				buffer = m_writeBuffer.front();
+				m_writeBuffer.pop();
+			}
+			lock2.unlock();
+			
+			if( !buffer.empty() )
+			{
+				size_t bufferSize = buffer.size();
+				ssize_t bytesWritten = 0;
+				int attempts = 0;
+				
+				// Try to write all the bytes
+				std::unique_lock<std::mutex> lock( m_flushMutex );
+				do
+				{
+					ssize_t curBytesWritten;
+					curBytesWritten = ::write( m_hPortHandle, &buffer[0], buffer.size() );
+					if( curBytesWritten <= 0 )
+					{	
+						attempts++;
+						if( attempts >= UART_WRITE_ATTEMPS )
+							break;
+						if( errno != EINTR | errno != EAGAIN ) {
+							m_threadError = ERR_UART_READ;
+							this->stopThread();
+							return;
+						}
+					}
+					else {
+						
+						bytesWritten += curBytesWritten;
+						if( bytesWritten < bufferSize )
+							std::this_thread::sleep_for( std::chrono::milliseconds(UART_WRITE_WAIT_MS) ); 
+					}
+				} while( bytesWritten < bufferSize );
+				lock.unlock();
+				
+				writeAvail = false;
 			}
 		}
 	}
@@ -394,7 +480,7 @@ int CUARTChannel::flush()
 
 	std::lock_guard<std::mutex> lock( m_flushMutex );
 	if( tcflush( m_hPortHandle, TCIOFLUSH ) == -1 )
-		return ERR_COMM_FLUSH_CHANNEL;
+		return ERR_UART_FLUSH_CHANNEL;
 	return ERR_OK;
 }
 
@@ -422,13 +508,13 @@ bool CUARTChannel::flushAttributes()
 int CUARTChannel::setBaudRate( speed_t baud )
 {
 	if( cfsetispeed( &m_portOptions, baud ) == -1 ) {
-		return ERR_COMM_INVALID_BAUD;
+		return ERR_UART_INVALID_BAUD;
 	}
 	if( cfsetospeed( &m_portOptions, baud ) == -1 ) {
-		return ERR_COMM_INVALID_BAUD;
+		return ERR_UART_INVALID_BAUD;
 	}
 	if( !this->flushAttributes() )
-		return ERR_COMM_SET_ATTRIB;
+		return ERR_UART_SET_ATTRIB;
 	
 	return ERR_OK;
 }
@@ -438,14 +524,14 @@ int CUARTChannel::setReadTimeout( cc_t bytesNeeded, cc_t deciseconds )
 	m_portOptions.c_cc[VMIN] = bytesNeeded;
 	m_portOptions.c_cc[VTIME] = deciseconds;
 	if( !this->flushAttributes() )
-		return ERR_COMM_SET_READ_TIMEOUT;
+		return ERR_UART_SET_READ_TIMEOUT;
 	return ERR_OK;
 }
 
 int CUARTChannel::setiFlag( tcflag_t iflag ) {
 	m_portOptions.c_iflag = iflag;
 	if( !this->flushAttributes() )
-		return ERR_COMM_SET_IFLAG;
+		return ERR_UART_SET_IFLAG;
 	return ERR_OK;
 }
 tcflag_t CUARTChannel::getiFlag() {
@@ -455,7 +541,7 @@ tcflag_t CUARTChannel::getiFlag() {
 int CUARTChannel::setoFlag( tcflag_t oflag ) {
 	m_portOptions.c_oflag = oflag;
 	if( !this->flushAttributes() )
-		return ERR_COMM_SET_OFLAG;
+		return ERR_UART_SET_OFLAG;
 	return ERR_OK;
 }
 tcflag_t CUARTChannel::getoFlag() {
@@ -465,7 +551,7 @@ tcflag_t CUARTChannel::getoFlag() {
 int CUARTChannel::setcFlag( tcflag_t cflag ) {
 	m_portOptions.c_cflag = cflag;
 	if( !this->flushAttributes() )
-		return ERR_COMM_SET_CFLAG;
+		return ERR_UART_SET_CFLAG;
 	return ERR_OK;
 }
 tcflag_t CUARTChannel::getcFlag() {
