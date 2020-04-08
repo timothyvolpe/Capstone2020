@@ -43,10 +43,11 @@ bool CConfig::extractSettings( boost::property_tree::ptree &pt, std::string path
 	m_fMotorDoorMaxCurrent1 = this->getSetting<float>( pt, "motors.max_door_current1", 15 ); // A, max controller
 	m_fMotorDoorMaxCurrent2 = this->getSetting<float>( pt, "motors.max_door_current1", 15 ); // A, max controller
 	
-	m_uiUltrasonicFLAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.front_left_address", 224 );
-	m_uiUltrasonicFRAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.front_right_address", 224 );
-	m_uiUltrasonicBLAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.back_left_address", 224 );
-	m_uiUltrasonicBRAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.back_right_address", 224 );
+	m_iUltrasonicSensorCount = (int)this->getSetting<int>( pt, "ultrasonic.sensor_count", 4 );
+	m_uiUltrasonicFLAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.front_left_address", 112 );
+	m_uiUltrasonicFRAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.front_right_address", 112 );
+	m_uiUltrasonicBLAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.back_left_address", 112 );
+	m_uiUltrasonicBRAddress = (uint8_t)this->getSetting<unsigned int>( pt, "ultrasonic.back_right_address", 112 );
 	
 	// Attempt to create and write
 	std::ofstream createFile( path );

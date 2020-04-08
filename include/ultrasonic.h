@@ -2,7 +2,7 @@
 #include <chrono>
 
 /** The factory default address of the sensors, or the address when forced to default. */
-#define ULTRASONIC_DEFAULT_ADDRESS 224
+#define ULTRASONIC_DEFAULT_ADDRESS 112
 /** The first part of the address unlock command. */
 #define ULTRASONIC_ADDR_UNLOCK_1 170
 /** The second part of the address unlock command. */
@@ -53,15 +53,6 @@ private:
 	unsigned char m_sensorAddress;
 	
 	std::chrono::steady_clock::time_point m_lastReadingTaken;
-	
-	/**
-	* @brief Polls every possible Ultrasonic sensor address. Used for debugging
-	* @details This checks each address one at a time. This will take a few seconds, and is blocking.
-	* Only use for debugging.
-	* @returns Returns #ERR_OK on success, or an appropriate error code if there was a failure. If no sensors were found but there were no comm errors, #ERR_OK is still returned.
-	* @warning Only use for debugging
-	*/
-	int pollAllAddress();
 public:
 	/** Default constructor */
 	CUltrasonicSensor( CI2CBus *pI2CBus, unsigned char address );
@@ -90,18 +81,30 @@ public:
 	int takeReading();
 	
 	/**
-	* @brief Gets the lasted available reading from the sensor
+	* @brief Gets the last available reading from the sensor
 	* @details This will fail if #ULTRASONIC_READ_TIME_MS has not passed since the last takeReading command.
+	* @param[out]	pRangeReading	The reading from the ultrasonic sensor. It will be 0 on sensor error.
+	* @returns Returns #ERR_OK if the command was sent successfully, or an appropriate error code
 	*/
-	int getReading( uint16_t rangeReading );
+	int getReading( uint16_t *pRangeReading );
 	
 	/**
 	* @brief This will change the devices address.
 	* @details This will update the address stored by the class to avoid losing communication. This should not be done repeatedly, as it will
-	* * wear out the EEPROM (source: datasheet).
+	* wear out the EEPROM (source: datasheet).
 	* 
 	* After this command is executed, we must wait #ULTRASONIC_RESET_DELAY_MS for the value to save and device to reset. This will be blocking
+	* @returns Returns #ERR_OK if the command was carried out successfully, or an appropriate error code
 	* @warning Blocking for #ULTRASONIC_RESET_DELAY_MS plus time to take reading, ~#ULTRASONIC_READ_TIME_MS
 	*/
 	int setAddress( uint8_t newAddress );
+	
+	/**
+	* @brief Commands the sensor to take a reading, and wait for the response.
+	* @details This will wait for a response from the sensor, so will block for atleast #ULTRASONIC_READ_TIME_MS
+	* @param[out]	pRangeReading	The reading from the ultrasonic sensor. It will be 0 on sensor error.
+	* @returns Returns #ERR_OK if the commands were sent successfully, or an appropriate error code.
+	* @warning This is blocking for at least #ULTRASONIC_READ_TIME_MS
+	*/
+	int takeReadingAndWait( uint16_t *pRangeReading );
 };

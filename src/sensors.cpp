@@ -13,14 +13,14 @@ CSensorManager::CSensorManager()
 {
 	m_pI2cBus = 0;
 	
-	std::memset( &m_pUltrasonicSensors[0], 0, sizeof( CUltrasonicSensor* )*ULTRASONIC_SENSOR_COUNT );
+	std::memset( &m_pUltrasonicSensors[0], 0, sizeof( CUltrasonicSensor* )*ULTRASONIC_MAX_SENSOR_COUNT );
 	m_pLIDARSensor = 0;
 	m_pInertialMotionSensors = 0;
 	m_pGPS = 0;
 }
 CSensorManager::~CSensorManager()
 {
-	for( unsigned int i = 0; i < ULTRASONIC_SENSOR_COUNT; i++ )
+	for( unsigned int i = 0; i < ULTRASONIC_MAX_SENSOR_COUNT; i++ )
 	{
 		if( m_pUltrasonicSensors[i] ) {
 			delete m_pUltrasonicSensors[i];
@@ -49,6 +49,7 @@ CSensorManager::~CSensorManager()
 int CSensorManager::initSensors()
 {
 	int errCode;
+	int sensorCount = CVehicle::instance().getConfig()->getUltrasonicSensorCount();
 	
 	// Open i2c comm bus
 	Terminal()->startItem( "Setting up I2C bus" );
@@ -68,10 +69,14 @@ int CSensorManager::initSensors()
 		CVehicle::instance().getConfig()->getUltrasonicBLAddress(),
 		CVehicle::instance().getConfig()->getUltrasonicBRAddress()
 	};
-	for( unsigned int i = 0; i < ULTRASONIC_SENSOR_COUNT; i++ )
+	assert( sizeof(sensorAddress) / sizeof( uint8_t) >= ULTRASONIC_MAX_SENSOR_COUNT );
+	if( sensorCount < ULTRASONIC_MAX_SENSOR_COUNT )
+		Terminal()->printImportant( "WARNING: Not using all ultrasonic sensors, should only be used for testing!\nChange ultrasonic.sensor_count in config.ini to %d\n", ULTRASONIC_MAX_SENSOR_COUNT );
+	
+	for( unsigned int i = 0; i < sensorCount; i++ )
 	{
 		Terminal()->startItem( "Ultrasonic sensor %d", i+1 );
-		m_pUltrasonicSensors[i] = new CUltrasonicSensor( m_pI2cBus, ULTRASONIC_DEFAULT_ADDRESS );	
+		m_pUltrasonicSensors[i] = new CUltrasonicSensor( m_pI2cBus, sensorAddress[i] );	
 		if( (errCode = m_pUltrasonicSensors[i]->initialize()) != ERR_OK )
 			return errCode;
 		Terminal()->finishItem( true );
@@ -112,4 +117,31 @@ int CSensorManager::update()
 	}
 	
 	return ERR_OK;
+}
+
+bool CSensorManager::printUltrasonicReadings()
+{
+	int sensorCount = CVehicle::instance().getConfig()->getUltrasonicSensorCount();
+	int errCode;
+	uint16_t rangeReading;
+	
+	Terminal()->print( "Taking ultrasonic range readings...\n" );
+	
+	for( unsigned int i = 0; i < sensorCount; i++ )
+	{
+		if( (errCode = m_pUltrasonicSensors[i]->takeReadingAndWait( &rangeReading )) == ERR_OK )
+			Terminal()->printImportant( "Ultrasonic %d: %d\n", i, rangeReading );
+		else {
+			Terminal()->printImportant( "Failed to read sensor %d\n", i );
+			return false;
+		}
+	}
+	
+	Terminal()->printImportant( "Done!\n" );
+	
+	return true;
+}
+
+CI2CBus* CSensorManager::getI2CBus() {
+	return m_pI2cBus;
 }

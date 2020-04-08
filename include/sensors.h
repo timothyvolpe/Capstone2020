@@ -9,8 +9,8 @@
 * @date 1/29/2020
 */
 
-/** The number of ultrasonic sensors to look for */
-#define ULTRASONIC_SENSOR_COUNT 4
+/** The number of ultrasonic sensors to look for, maximum. Can be reduced in config.ini for testing. */
+#define ULTRASONIC_MAX_SENSOR_COUNT 4
 
 class CUltrasonicSensor;
 class CLIDARSensor;
@@ -34,7 +34,7 @@ class CSensorManager
 private:
 	CI2CBus *m_pI2cBus;
 
-	CUltrasonicSensor* m_pUltrasonicSensors[ULTRASONIC_SENSOR_COUNT];
+	CUltrasonicSensor* m_pUltrasonicSensors[ULTRASONIC_MAX_SENSOR_COUNT];
 	CLIDARSensor* m_pLIDARSensor;
 	CInertialMotionSensors* m_pInertialMotionSensors;
 	CGlobalPositioning* m_pGPS;
@@ -63,4 +63,15 @@ public:
 	* @returns Returns #ERR_OK if there were no errors, or an appropriate eror code if a failure occurred. 
 	*/
 	int update();
+	
+	/**
+	* @brief Prints new range readings from each ultrasonic sensor.
+	* @details This will command the sensors to take new readings and report them to the console.
+	* This is blocking
+	* @returns Returns true if no error, or false if there was an error.
+	* @warning Blocking.
+	*/
+	bool printUltrasonicReadings();
+	
+	CI2CBus* getI2CBus();
 };

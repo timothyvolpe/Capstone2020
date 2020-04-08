@@ -6,6 +6,7 @@
 #include <mutex>
 #include <vector>
 #include <queue>
+#include <condition_variable>
 #ifdef __linux__
 #include <linux/i2c-dev.h>
 #include <termios.h>
@@ -41,6 +42,8 @@ private:
 	
 	std::thread m_thread;
 	std::atomic<bool> m_threadRunning;
+	
+	std::condition_variable m_threadStarted;
 	
 	void threadMain();
 protected:
@@ -149,11 +152,24 @@ class CI2CBus : public CWireProtocol
 private:
 	struct I2CPacket
 	{
+		I2CPacket() : address( 0x00 ), noResponse( true ) {
+		}
+		I2CPacket( const I2CPacket &p2 ) : address( p2.address ), payload( p2.payload ), noResponse( p2.noResponse ) {
+			readFromPort = p2.readFromPort;
+			respLen = p2.respLen;
+		}
+		
 		unsigned char address;
 		std::vector<unsigned char> payload;
+		bool readFromPort;
+		size_t respLen;
+		bool noResponse;
 	};
 	
 	std::queue<I2CPacket> m_writeBuffer;
+	std::vector<I2CPacket> m_responseBuffer;
+	
+	std::condition_variable m_waitingToSend;
 protected:
 	void threadLoop();
 	void preStopThread();
@@ -183,30 +199,72 @@ public:
 	* @brief Writes an i2c packet to the bus.
 	* @details This method forms the packet automatically and sends it to the comm thread
 	* to be transmitted.
-	* @param[in]	address		The slave address to send the payload to.
-	* @param[in]	writeBit	If true, the write bit will be set to one. If false, it will be forced to 0.
+	* @param[in]	address		The slave address to send the payload to. Should be 7-bit address
 	* @param[in]	payload		The data payload to deliver to the slave at the specified address.
+	* @param[in]	read		If true, a response is expected. If false, no response will be read.\
+	* @param[in]	respLen		If read is true, this is the length of the expected response.
 	* @returns Returns true if successfully posted the message to the comm thread, false if otherwise.
 	*/
-	bool write_i2c( unsigned char address, bool writeBit, std::vector<unsigned char> payload );
+	bool write_i2c( uint8_t address, std::vector<unsigned char> payload, bool read, size_t respLen = 0 );
 	
 	/**
 	* @brief Write a single byte to an i2c device
 	* @details This writes one device to an i2c device. Posts it to the comm thread for non-blocking write.
-	* @param[in]	address		The address to write to. The R/W bit will be set.
+	* @param[in]	address		The address to write to.
 	* @param[in]	data		The byte to write to the device.
+	* @param[in]	read		If true, a response is expected. If false, no response will be read.
+	* @param[in]	respLen		If read is true, this is the length of the expected response.
 	* @returns Returns ture if successfully posted to the comm thread, false if otherwise.
 	*/
-	bool write_i2c_byte( unsigned char address, unsigned char data );
+	bool write_i2c_byte( uint8_t address, unsigned char data, bool read, size_t respLen = 0 );
 	
 	bool write( std::vector<unsigned char> buffer );
 	std::vector<unsigned char> read( size_t count );
+	
+	/**
+	* @brief Checks for the oldest response from the given address.
+	* @details This checks the response vector for responses from the given address, and returns the payload
+	* of the oldest one, and removes it from the vector. If no response was found, or the response was invalid
+	* for any reason, false is returned. Else, true is returned.
+	* @param[in]	address		The address of interest
+	* @param[in]	timeoutMS	The amount of time to wait for a response to be posted. If 0 is given, it will not wait and fail immediately if no response exists.
+	* @param[out]	response	The response payload
+	* @returns True if a valid response was found, false if no response or invalid response, or the timeout expired.
+	*/
+	bool read_i2c( uint8_t address, int timeoutMS, std::vector<unsigned char> &response );
 
 	int flush();
+	
+	/**
+	* @brief Flush the write buffer and block until it is done, or timeout is hit.
+	* @details Use this if you want to make sure all the i2c commands were transmitted.
+	* @warning Be careful with this, if something is continually writing to the bus in a different thread,
+	* it will be missed.
+	* @returns True if successfully flushed, or false if the timeout was hit.
+	*/
+	bool flushWriteBlocking( int timeoutMS );
 	
 	bool dataAvailable();
 	
 	bool isOpen();
+	
+	/**
+	* @brief Checks if there is a device at the given I2C address.
+	* @details Sends a 0x00 command to the address and checks for ACK, to verify a device exists at the address.
+	* This will flush the buffers, and is blocking.
+	* @returns True if device exists, false if otherwise.
+	* @warning Flushes buffers, and is blocking.
+	*/
+	bool checkAddress( uint8_t addr );
+	
+	/**
+	* @brief Polls every possible i2c 7-bit address. Used for debugging
+	* @details This checks each address one at a time. This will take a few seconds, and is blocking.
+	* Only use for debugging.
+	* @returns Returns true if successfully polled all addresses, or false if there was an internal error.
+	* @warning Only use for debugging. Flushes the bus
+	*/
+	bool pollAllAddress();
 };
 
 /**

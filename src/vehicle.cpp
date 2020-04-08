@@ -229,10 +229,22 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 		Terminal()->print( "reverse1 [speed]\t- Drive main motor on channel 1 in reverse. Speed 0-127\n" );
 		Terminal()->print( "forward2 [speed]\t- Drive main motor on channel 2 forward. Speed 0-127\n" );
 		Terminal()->print( "reverse2 [speed]\t- Drive main motor on channel 2 in reverse. Speed 0-127\n" );
+		Terminal()->print( "polli2c\t\t\t- Poll all I2C addresses for sensors\n" );
+		Terminal()->print( "rangeultra\t\t-Take a range reading from the ultrasonic sensors\n" );
 		Terminal()->printImportant( "\n" );
 	}
 	else if( commandName.compare( "mocstatus" ) == 0 ) {
 		m_pMotionManager->printMotorStatus();
+		Terminal()->printImportant( "\n" );
+	}
+	else if( commandName.compare( "polli2c" ) == 0 ) {
+		if( !m_pSensorManager->getI2CBus()->pollAllAddress() )
+			Terminal()->printImportant( "Command failed\n" );
+		Terminal()->printImportant( "\n" );
+	}
+	else if( commandName.compare( "rangeultra" ) == 0 ) {
+		if( !m_pSensorManager->printUltrasonicReadings() )
+			Terminal()->printImportant( "Command failed\n" );
 		Terminal()->printImportant( "\n" );
 	}
 	else if( commandName.compare( "forward1" ) == 0 || commandName.compare( "reverse1" ) == 0  || 

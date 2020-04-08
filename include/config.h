@@ -75,6 +75,7 @@ private:
 	float		m_fMotorDoorMaxCurrent1;
 	float		m_fMotorDoorMaxCurrent2;
 	
+	int			m_iUltrasonicSensorCount;
 	uint8_t		m_uiUltrasonicFLAddress;
 	uint8_t		m_uiUltrasonicFRAddress;
 	uint8_t		m_uiUltrasonicBLAddress;
@@ -112,6 +113,8 @@ public:
 	inline const float getMotorPropMaxCurrent2() { return m_fMotorPropMaxCurrent2; }
 	inline const float getMotorDoorMaxCurrent1() { return m_fMotorDoorMaxCurrent1; }
 	inline const float getMotorDoorMaxCurrent2() { return m_fMotorDoorMaxCurrent2; }
+	
+	inline const int getUltrasonicSensorCount() { return m_iUltrasonicSensorCount; }
 	
 	inline const uint8_t getUltrasonicFLAddress() { return m_uiUltrasonicFLAddress; }
 	inline const uint8_t getUltrasonicFRAddress() { return m_uiUltrasonicFRAddress; }
