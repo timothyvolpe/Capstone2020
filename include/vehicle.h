@@ -45,6 +45,7 @@ private:
 
 	CSensorManager* m_pSensorManager;
 	std::chrono::steady_clock::time_point m_lastSensorUpdate;
+	bool m_constantRangePrint;
 
 	bool m_isRunning;
 

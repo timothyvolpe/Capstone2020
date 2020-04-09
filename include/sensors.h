@@ -19,7 +19,12 @@ class CGlobalPositioning;
 class CI2CBus;
 
 /** How often to update the sensors, in Hz */
-#define SENSOR_UPDATE_FREQUENCY 0.5
+#define SENSOR_UPDATE_FREQUENCY 2
+
+/** The amount of time, in ms, to wait for the i2c write messages to flush at the end of an update frame. */
+#define I2C_FLUSH_TIMEOUT_MS 500
+/** The number of consecutive i2c flush failures before a fatal error occurs. */
+#define I2C_FLUSH_FAILURE_LIMIT 2
 
 /**
 * @brief Class for managing all vehicle sensors.
@@ -33,8 +38,11 @@ class CSensorManager
 {
 private:
 	CI2CBus *m_pI2cBus;
+	int m_consecFlushFailures;
 
 	CUltrasonicSensor* m_pUltrasonicSensors[ULTRASONIC_MAX_SENSOR_COUNT];
+	int m_actualUltraSensorCount;
+	
 	CLIDARSensor* m_pLIDARSensor;
 	CInertialMotionSensors* m_pInertialMotionSensors;
 	CGlobalPositioning* m_pGPS;

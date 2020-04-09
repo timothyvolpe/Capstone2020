@@ -12,8 +12,11 @@
 CSensorManager::CSensorManager()
 {
 	m_pI2cBus = 0;
+	m_consecFlushFailures = 0;
 	
 	std::memset( &m_pUltrasonicSensors[0], 0, sizeof( CUltrasonicSensor* )*ULTRASONIC_MAX_SENSOR_COUNT );
+	m_actualUltraSensorCount = 0;
+	
 	m_pLIDARSensor = 0;
 	m_pInertialMotionSensors = 0;
 	m_pGPS = 0;
@@ -49,7 +52,7 @@ CSensorManager::~CSensorManager()
 int CSensorManager::initSensors()
 {
 	int errCode;
-	int sensorCount = CVehicle::instance().getConfig()->getUltrasonicSensorCount();
+	m_actualUltraSensorCount = CVehicle::instance().getConfig()->getUltrasonicSensorCount();
 	
 	// Open i2c comm bus
 	Terminal()->startItem( "Setting up I2C bus" );
@@ -70,10 +73,10 @@ int CSensorManager::initSensors()
 		CVehicle::instance().getConfig()->getUltrasonicBRAddress()
 	};
 	assert( sizeof(sensorAddress) / sizeof( uint8_t) >= ULTRASONIC_MAX_SENSOR_COUNT );
-	if( sensorCount < ULTRASONIC_MAX_SENSOR_COUNT )
+	if( m_actualUltraSensorCount < ULTRASONIC_MAX_SENSOR_COUNT )
 		Terminal()->printImportant( "WARNING: Not using all ultrasonic sensors, should only be used for testing!\nChange ultrasonic.sensor_count in config.ini to %d\n", ULTRASONIC_MAX_SENSOR_COUNT );
 	
-	for( unsigned int i = 0; i < sensorCount; i++ )
+	for( unsigned int i = 0; i < m_actualUltraSensorCount; i++ )
 	{
 		Terminal()->startItem( "Ultrasonic sensor %d", i+1 );
 		m_pUltrasonicSensors[i] = new CUltrasonicSensor( m_pI2cBus, sensorAddress[i] );	
@@ -109,6 +112,8 @@ int CSensorManager::update()
 {
 	int errCode;
 	
+	assert( m_pI2cBus );
+	
 	// Check comm threads for errors
 	errCode = m_pI2cBus->getThreadError();
 	if( errCode != ERR_OK ) {
@@ -116,28 +121,40 @@ int CSensorManager::update()
 		return errCode;
 	}
 	
+	// Update all sensors
+	for( unsigned int i = 0; i < m_actualUltraSensorCount; i++ )
+	{
+		if( (errCode = m_pUltrasonicSensors[i]->update()) != ERR_OK ) {
+			Terminal()->printImportant( "ERROR: Failed to update ultrasonic sensor %d\n", i+1 );
+			return errCode;
+		}
+	}
+	
+	// Flush all i2c write messages. This does not flush the read buffer
+	// I2C_FLUSH_FAILURE_LIMIT or more consecutive failures is a fatal error.
+	if( !m_pI2cBus->flushWriteBlocking( I2C_FLUSH_TIMEOUT_MS ) )
+	{
+		m_consecFlushFailures++;
+		if( m_consecFlushFailures >= I2C_FLUSH_FAILURE_LIMIT ) {
+			Terminal()->printImportant( "ERROR: %d or more consecutive i2c write buffer flush failures occured!\n", I2C_FLUSH_FAILURE_LIMIT );
+			return ERR_SENSORS_FLUSH_TIMEOUT;
+		}
+	}
+	else
+		m_consecFlushFailures = 0;
+	
 	return ERR_OK;
 }
 
 bool CSensorManager::printUltrasonicReadings()
 {
-	int sensorCount = CVehicle::instance().getConfig()->getUltrasonicSensorCount();
 	int errCode;
 	uint16_t rangeReading;
 	
-	Terminal()->print( "Taking ultrasonic range readings...\n" );
-	
-	for( unsigned int i = 0; i < sensorCount; i++ )
-	{
-		if( (errCode = m_pUltrasonicSensors[i]->takeReadingAndWait( &rangeReading )) == ERR_OK )
-			Terminal()->printImportant( "Ultrasonic %d: %d\n", i, rangeReading );
-		else {
-			Terminal()->printImportant( "Failed to read sensor %d\n", i );
-			return false;
-		}
+	for( unsigned int i = 0; i < m_actualUltraSensorCount; i++ ) {
+		rangeReading = m_pUltrasonicSensors[i]->getLastReading();
+		Terminal()->print( "Ultrasonic Sensor %i: %d\n", i, rangeReading );
 	}
-	
-	Terminal()->printImportant( "Done!\n" );
 	
 	return true;
 }

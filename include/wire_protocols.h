@@ -27,6 +27,9 @@
 /** The number of consecutive write attempts to make before failing out. */
 #define UART_WRITE_ATTEMPS 10 
 
+/** The amount of time to wait, in ms, for an i2c device to respond. */
+#define I2C_CHECK_ADDRESS_TIMEOUT_MS 1000
+
 /**
 * @brief The base class for wire protocols
 * @details This class contains all the shared operations between the classes that send
@@ -153,16 +156,18 @@ private:
 	struct I2CPacket
 	{
 		I2CPacket() : address( 0x00 ), noResponse( true ) {
+			writeMode = false;
 		}
-		I2CPacket( const I2CPacket &p2 ) : address( p2.address ), payload( p2.payload ), noResponse( p2.noResponse ) {
-			readFromPort = p2.readFromPort;
-			respLen = p2.respLen;
+		I2CPacket( const I2CPacket &p2 ) {
+			address = p2.address;
+			writeMode = p2.writeMode;
+			payload = p2.payload;
+			noResponse = p2.noResponse;
 		}
 		
 		unsigned char address;
+		bool writeMode;
 		std::vector<unsigned char> payload;
-		bool readFromPort;
-		size_t respLen;
 		bool noResponse;
 	};
 	
@@ -196,42 +201,68 @@ public:
 	void close();
 	
 	/**
-	* @brief Writes an i2c packet to the bus.
-	* @details This method forms the packet automatically and sends it to the comm thread
-	* to be transmitted.
-	* @param[in]	address		The slave address to send the payload to. Should be 7-bit address
-	* @param[in]	payload		The data payload to deliver to the slave at the specified address.
-	* @param[in]	read		If true, a response is expected. If false, no response will be read.\
-	* @param[in]	respLen		If read is true, this is the length of the expected response.
-	* @returns Returns true if successfully posted the message to the comm thread, false if otherwise.
+	* @brief Sends a write packet to the i2c bus at the given address.
+	* @details The address defines where to send the packet, or declares 10-bit addressing. The payload
+	* contains the packet data, which is sent after the address. The mesage is only posted to the comm thread;
+	* no confirmation that it was successfully sent is avaiable via this method.
+	* @param[in]	address		Address to send the packet, or 10-bit addressing constant. Sent first in write mode.
+	* @param[in]	payload		The payload of the packet, sent after the address
+	* @returns Returns true if successfully posted to the comm thread, or false otherwise.
 	*/
-	bool write_i2c( uint8_t address, std::vector<unsigned char> payload, bool read, size_t respLen = 0 );
+	bool i2c_write( uint8_t address, std::vector<unsigned char> payload );
 	
 	/**
-	* @brief Write a single byte to an i2c device
-	* @details This writes one device to an i2c device. Posts it to the comm thread for non-blocking write.
-	* @param[in]	address		The address to write to.
-	* @param[in]	data		The byte to write to the device.
-	* @param[in]	read		If true, a response is expected. If false, no response will be read.
-	* @param[in]	respLen		If read is true, this is the length of the expected response.
-	* @returns Returns ture if successfully posted to the comm thread, false if otherwise.
+	* @brief Wrapper for #i2c_write but only sends one byte.
 	*/
-	bool write_i2c_byte( uint8_t address, unsigned char data, bool read, size_t respLen = 0 );
+	bool i2c_write_8( uint8_t address, uint8_t data );
+	
+	/**
+	* @brief Sends a read packet to the i2c bus at the given address.
+	* @details The address defines where to send the packet, or a register address to a previously addressed device (based on
+	* device implementation). It is written first in read mode. Up to responeLen number of bytes are read from the port. The mesage is only posted to the 
+	* comm thread; no confirmation that it was successfully sent 
+	* is avaiable via this method.
+	* @param[in]	address			The address to send the command to, sent first in readd mode.
+	* @param[in]	responseLen		Up to this many bytes are read; it may be less.
+	* @returns Returns true if successfully posted to the comm thread, or false otherwise.
+	*/
+	bool i2c_read( uint8_t address, size_t responseLen );
+	
+	/**
+	* @brief Wrapper for #i2c_read but only reads one byte.
+	*/
+	bool i2c_read_8( uint8_t address );
+	/**
+	* @brief Wrapper for #i2c_read but only reads two bytes.
+	*/
+	bool i2c_read_16( uint8_t address );
 	
 	bool write( std::vector<unsigned char> buffer );
-	std::vector<unsigned char> read( size_t count );
 	
 	/**
 	* @brief Checks for the oldest response from the given address.
 	* @details This checks the response vector for responses from the given address, and returns the payload
 	* of the oldest one, and removes it from the vector. If no response was found, or the response was invalid
-	* for any reason, false is returned. Else, true is returned.
-	* @param[in]	address		The address of interest
+	* for any reason, false is returned. Otherwise, true is returned.
+	* @param[in]	address		The device address of interest
 	* @param[in]	timeoutMS	The amount of time to wait for a response to be posted. If 0 is given, it will not wait and fail immediately if no response exists.
 	* @param[out]	response	The response payload
 	* @returns True if a valid response was found, false if no response or invalid response, or the timeout expired.
 	*/
-	bool read_i2c( uint8_t address, int timeoutMS, std::vector<unsigned char> &response );
+	bool receive_i2c( uint8_t address, int timeoutMS, std::vector<unsigned char> &response );
+	/**
+	* @brief Checks if the device responded with an acknowledgement. Used to verify writes were successful.
+	* @details This checks for the oldest ACK a device sent, so it will be an ACK for the oldest command sent
+	* after a flush. Checking will remove if from the response buffer, this function just wraps #receive_i2c
+	* @param[in]	address		The device address of interest
+	* @param[in]	timeoutMS	The amount of time to wait for a response to be posted. If 0 is given, it will not wait and fail immediately if no response exists.
+	* @returns True if a valid response was found, or false if no response, invalid response, or the timeout expired.
+	*/
+	bool check_ack_i2c( uint8_t address, int timeoutMS );
+	
+	std::vector<unsigned char> read( size_t count );
+	
+	
 
 	int flush();
 	

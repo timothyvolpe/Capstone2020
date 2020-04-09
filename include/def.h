@@ -106,6 +106,15 @@
 #define ERR_ULTRASONIC_NOT_READY		ERR_ULTRASONIC_BASE + 0x1
 /** There was a failure taking an ultrasonic range reading. */
 #define ERR_ULTRASONIC_RANGE			ERR_ULTRASONIC_BASE + 0x2
+/** There were too many consecutive missed readings in a row. */
+#define ERR_ULTRASONIC_TOO_MANY_MISSED	ERR_ULTRASONIC_BASE + 0x3
+/** Too much time passed between successful consecutive ultrasonic sensor readings. */
+#define ERR_ULTRASONIC_READING_EXPIRED	ERR_ULTRASONIC_BASE + 0x4
+
+/** All general sensor errors start at this value */
+#define ERR_SENSORS_BASE				0xA000
+/** Failed to flush the I2C write buffer in the specified time. */
+#define ERR_SENSORS_FLUSH_TIMEOUT		ERR_SENSORS_BASE + 0x01
 
 /**
 * @brief Combines error code and error message for lookup
@@ -157,7 +166,11 @@ static const error_message_t ErrorMessageTable[] = {
 	{ ERR_CONFIG_SYNTAX, "There was a syntax error in the config file." },
 	
 	{ ERR_ULTRASONIC_NOT_READY, "The ultrasonic sensor is not ready to take the next reading." },
-	{ ERR_ULTRASONIC_RANGE, "There was a failure taking an ultrasonic range reading." }
+	{ ERR_ULTRASONIC_RANGE, "There was a failure taking an ultrasonic range reading." },
+	{ ERR_ULTRASONIC_TOO_MANY_MISSED, "There were too many consecutive missed ultrasonic sensor readings in a row." },
+	{ ERR_ULTRASONIC_READING_EXPIRED, "Too much time passed between successful consecutive ultrasonic sensor readings." },
+	
+	{ ERR_SENSORS_FLUSH_TIMEOUT, "Failed to flush the I2C write buffer in the specified time." }
 };
 
 #define ERRMSG_TABLE_LEN  sizeof(ErrorMessageTable)/sizeof(ErrorMessageTable[0])

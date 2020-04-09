@@ -129,7 +129,6 @@ void CI2CBus::threadLoop()
 		std::unique_lock<std::mutex> lock( m_writeMutex );
 		if( !m_writeBuffer.empty() ) {
 			packet = m_writeBuffer.front();
-			//Terminal()->printImportant( "Read is %s, and resp len is %d\n", (m_writeBuffer.front().readFromPort ? "True" : "False"), m_writeBuffer.front().respLen );
 			m_writeBuffer.pop();
 		}
 		if( m_writeBuffer.empty() )
@@ -140,34 +139,22 @@ void CI2CBus::threadLoop()
 		if( packet.address != 0 && packet.payload.size() > 0 )
 		{
 			// Form the buffer
-			std::vector<i2c_msg> messages;
+			i2c_msg message;
 			i2c_rdwr_ioctl_data i2cpayload;
 			CI2CBus::I2CPacket responsePacket;
 			
 			responsePacket.address = packet.address;
 
-			// Write message, always exists
-			i2c_msg writeMsg;
-			writeMsg.addr = packet.address;
-			writeMsg.buf = &packet.payload[0];
-			writeMsg.len = packet.payload.size();
-			writeMsg.flags = 0;
-			messages.push_back( writeMsg );
-			
-			// Read message, only exists if read is true
-			if( packet.readFromPort )
-			{
-				i2c_msg readMsg;
-				readMsg.addr = packet.address;
-				readMsg.len = packet.respLen;
-				readMsg.flags = I2C_M_RD;
-				responsePacket.payload.resize( packet.respLen );
-				readMsg.buf = &responsePacket.payload[0];
-				messages.push_back( readMsg );
-			}
+			message.addr = packet.address;
+			message.buf = &packet.payload[0];
+			message.len = packet.payload.size();
+			if( packet.writeMode )
+				message.flags = 0;
+			else
+				message.flags = I2C_M_RD;
 	
-			i2cpayload.msgs = &messages[0];
-			i2cpayload.nmsgs = messages.size();
+			i2cpayload.msgs = &message;
+			i2cpayload.nmsgs = 1;
 			
 			// Send i2c message and check if device responds
 			if( ioctl( m_hPortHandle, I2C_RDWR, &i2cpayload ) == -1 )
@@ -184,8 +171,9 @@ void CI2CBus::threadLoop()
 					return;
 				}
 			}
-			// Response be in responsePacket.payload
+			// Save response
 			else {
+				responsePacket.payload = packet.payload;
 				responsePacket.noResponse = false;
 			}
 			
@@ -243,40 +231,56 @@ void CI2CBus::close() {
 	this->stopThread();
 }
 
-bool CI2CBus::write_i2c( uint8_t address, std::vector<unsigned char> payload, bool read, size_t respLen )
+bool CI2CBus::i2c_write( uint8_t address, std::vector<unsigned char> payload )
 {
-	// If read is true, respLen must be > 0
-	assert( (!read) ^ (respLen > 0) );
-	
 	if( !this->isOpen() || !this->isRunning() ) 
 		return false;
-
-	// Form the packet
+		
 	CI2CBus::I2CPacket packet;
 	packet.address = address;
 	packet.payload = payload;
-	packet.readFromPort = read;
-	packet.respLen = respLen;
+	packet.writeMode = true;
 	
 	std::lock_guard<std::mutex> lock( m_writeMutex );
 	m_writeBuffer.push( packet );
-
+	
 	return true;
 }
-bool CI2CBus::write_i2c_byte( uint8_t address, unsigned char data, bool read, size_t respLen ) {
-	std::vector<unsigned char> buffer(1);
-	buffer[0] = data;
-	return this->write_i2c( address, buffer, read, respLen );
+bool CI2CBus::i2c_write_8( uint8_t address, uint8_t data ) {
+	std::vector<unsigned char> payload( 1 );
+	payload[0] = data;
+	return this->i2c_write( address, payload );
 }
 
-bool CI2CBus::write( std::vector<unsigned char> buffer )
+bool CI2CBus::i2c_read( uint8_t address, size_t responseLen )
 {
+	if( !this->isOpen() || !this->isRunning() ) 
+		return false;
+		
+	CI2CBus::I2CPacket packet;
+	packet.address = address;
+	packet.payload = std::vector<unsigned char>( responseLen );
+	packet.writeMode = false;
+	
+	std::lock_guard<std::mutex> lock( m_writeMutex );
+	m_writeBuffer.push( packet );
+	
+	return true;
+}
+bool CI2CBus::i2c_read_8( uint8_t address ) {
+	return this->i2c_read( address, 1 );
+}
+bool CI2CBus::i2c_read_16( uint8_t address ) {
+	return this->i2c_read( address, 2 );
+}
+
+bool CI2CBus::write( std::vector<unsigned char> buffer ) {
 	assert( false ); // Don't use this for now
 	
 	return true;
 }
 
-bool CI2CBus::read_i2c( uint8_t address, int timeoutMS, std::vector<unsigned char> &response )
+bool CI2CBus::receive_i2c( uint8_t address, int timeoutMS, std::vector<unsigned char> &response )
 {	
 	CI2CBus::I2CPacket packet;
 	bool found = false;
@@ -314,6 +318,11 @@ bool CI2CBus::read_i2c( uint8_t address, int timeoutMS, std::vector<unsigned cha
 	}
 	// No response found apparently
 	return false;
+}
+
+bool CI2CBus::check_ack_i2c( uint8_t address, int timeoutMS ) {
+	std::vector<unsigned char> dummyResp;
+	return this->receive_i2c( address, timeoutMS, dummyResp );
 }
 
 std::vector<unsigned char> CI2CBus::read( size_t count )
@@ -355,14 +364,13 @@ bool CI2CBus::checkAddress( uint8_t addr )
 {
 	this->flush();
 	// Send dummy command and block until it is transmitted
-	this->write_i2c_byte( addr, 0, false );
-	if( !this->flushWriteBlocking( 1000 ) ) {
+	this->i2c_write_8( addr, 0 );
+	if( !this->flushWriteBlocking( I2C_CHECK_ADDRESS_TIMEOUT_MS ) ) {
 		Terminal()->printImportant( "Timeout expired while checking i2c address\n" );
 		return false;
 	}
 	// Check for response
-	std::vector<unsigned char> response;
-	if( !this->read_i2c( addr, 0, response ) )
+	if( !this->check_ack_i2c( addr, 0 ) )
 		return false;
 	return true;
 }
@@ -380,7 +388,7 @@ bool CI2CBus::pollAllAddress()
 	for( uint8_t addr = 0x01; addr <= 0x7F; addr++ )
 	{
 		// Write a dummy command to the port
-		if( !this->write_i2c_byte( addr, 0, false ) ) {
+		if( !this->i2c_write_8( addr, 0 ) ) {
 			Terminal()->printImportant( "There was an internal i2c error\n" );
 			return false;
 		}
@@ -394,8 +402,7 @@ bool CI2CBus::pollAllAddress()
 	// Check for responses
 	for( uint8_t addr = 0x01; addr <= 0x7F; addr++ )
 	{
-		std::vector<unsigned char> response;
-		if( this->read_i2c( addr, 0, response ) )
+		if( this->check_ack_i2c( addr, 0 ) )
 			respondingAddresses.push_back( addr );
 	}
 	

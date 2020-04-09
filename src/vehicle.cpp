@@ -17,7 +17,10 @@
 CVehicle::CVehicle()
 {
 	m_pVehicleTerminal = 0;
+	
 	m_pSensorManager = 0;
+	m_constantRangePrint = 0;
+	
 	m_isRunning = false;
 	
 	m_pConfig = 0;
@@ -154,14 +157,19 @@ int CVehicle::update()
 	int errCode;
 	
 	// Update sensors if necessary
-	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastSensorUpdate).count() > ((1/SENSOR_UPDATE_FREQUENCY)*1000.0) ) {
+	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastSensorUpdate).count() > ((1.0/SENSOR_UPDATE_FREQUENCY)*1000.0) ) {
 		if( (errCode = m_pSensorManager->update()) != ERR_OK )
 			return errCode;
+		if( m_constantRangePrint ) {
+			if( !m_pSensorManager->printUltrasonicReadings() )
+				Terminal()->printImportant( "Command failed\n" );
+			Terminal()->printImportant( "\n" );
+		}
 		m_lastSensorUpdate = curtime;
 	}
 	
 	// Update motors if necessary
-	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1/MOTOR_UPDATE_FREQUENCY)*1000.0) ) {
+	if( std::chrono::duration_cast<std::chrono::milliseconds>(curtime - m_lastMotorUpdate).count() > ((1.0/MOTOR_UPDATE_FREQUENCY)*1000.0) ) {
 		if( (errCode = m_pMotionManager->update()) != ERR_OK )
 			return errCode;
 		m_lastMotorUpdate = curtime;
@@ -230,7 +238,8 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 		Terminal()->print( "forward2 [speed]\t- Drive main motor on channel 2 forward. Speed 0-127\n" );
 		Terminal()->print( "reverse2 [speed]\t- Drive main motor on channel 2 in reverse. Speed 0-127\n" );
 		Terminal()->print( "polli2c\t\t\t- Poll all I2C addresses for sensors\n" );
-		Terminal()->print( "rangeultra\t\t-Take a range reading from the ultrasonic sensors\n" );
+		Terminal()->print( "rangeultra\t\t- Take a range reading from the ultrasonic sensors\n" );
+		Terminal()->print( "printrange [on/off]\t- Starts/stops constant output of ultrasonic sensor range\n" );
 		Terminal()->printImportant( "\n" );
 	}
 	else if( commandName.compare( "mocstatus" ) == 0 ) {
@@ -246,6 +255,23 @@ void CVehicle::parseCommandMessage( std::unique_ptr<message_t> pCommandMsg )
 		if( !m_pSensorManager->printUltrasonicReadings() )
 			Terminal()->printImportant( "Command failed\n" );
 		Terminal()->printImportant( "\n" );
+	}
+	else if( commandName.compare( "printrange" ) == 0 )
+	{
+		if( tokens.size() < 2 )
+			Terminal()->printImportant( "Missing speed argument. See 'help'\n" );
+		else {
+			if( tokens[1].compare( "on" ) == 0 ) {
+				Terminal()->printImportant( "Turning on constant ranging print...\n" );
+				m_constantRangePrint = true;
+			}
+			else if( tokens[1].compare( "off" ) == 0 ) {
+				Terminal()->printImportant( "Turning off constant ranging print...\n" );
+				m_constantRangePrint = false;
+			}
+			else
+				Terminal()->printImportant( "Invalid argument. See 'help'\n" );
+		}
 	}
 	else if( commandName.compare( "forward1" ) == 0 || commandName.compare( "reverse1" ) == 0  || 
 				commandName.compare( "forward2" ) == 0 || commandName.compare( "reverse2" ) == 0 || 
